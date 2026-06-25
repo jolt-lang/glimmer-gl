@@ -1,12 +1,15 @@
-geom-gl
+glimmer-gl
 =======
 
-Native OpenGL geometry & matrix library for jolt, ported from thi.ng/geom.
+An OpenGL geometry, matrix, and shader library for jolt — an extension of
+glimmer — ported from thi.ng/geom.
 
 This product includes software developed as part of thi.ng/geom
 (https://thi.ng/geom) by Karsten Schmidt, licensed under the Apache License,
-Version 2.0. The matrix arithmetic, cofactor inversion, and constructor
-formulas are derived from geom's thi.ng.geom.matrix.
+Version 2.0. Derived from geom: the matrix arithmetic, cofactor inversion, and
+constructor formulas (thi.ng.geom.matrix); the mesh model, tessellation, and
+primitive vertex/face definitions (thi.ng.geom.{basicmesh,utils,cuboid,
+tetrahedron,sphere,plane}); and the shader-spec model (thi.ng.geom.gl.shaders).
 
-geom-gl is licensed under the Apache License, Version 2.0 (see ./LICENSE),
+glimmer-gl is licensed under the Apache License, Version 2.0 (see ./LICENSE),
 which is compatible with jolt's Eclipse Public License 1.0.

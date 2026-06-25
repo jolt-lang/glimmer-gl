@@ -1,6 +1,6 @@
-(ns geom-gl.matrix-test
+(ns glimmer-gl.matrix-test
   (:require [clojure.test :refer [deftest is testing]]
-            [geom-gl.matrix :as m]))
+            [glimmer-gl.matrix :as m]))
 
 ;; Column-major 4×4 (OpenGL convention): each successive 4 values are one column.
 ;; ->vec returns the 16 components in that order, so tests assert on raw storage.
@@ -48,13 +48,13 @@
   ;; fovy=90°, aspect=1, near=0.1, far=100.
   ;; f = 1/tan(45°) ≈ 1; nf = 1/(0.1-100) = 1/-99.9 = -0.010010010...
   ;; m00 = f/aspect ≈ 1, m11 = f ≈ 1,
-  ;; m22 = near*nf + far ≈ 99.998998999, m23 = -1,
+  ;; m22 = (near+far)*nf ≈ -1.002002002, m23 = -1,
   ;; m32 = 2*near*far*nf ≈ -0.2002002002
   (let [p (m/perspective 90.0 1.0 0.1 100.0)
         v (m/->vec p)]
     (is (approx [1.0 0 0 0
               0 1.0 0 0
-              0 0 99.998998999 -1.0
+              0 0 -1.002002002 -1.0
               0 0 -0.2002002002 0]
              v 1e-6))))
 

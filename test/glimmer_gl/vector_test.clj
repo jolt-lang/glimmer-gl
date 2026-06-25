@@ -1,6 +1,6 @@
-(ns geom-gl.vector-test
+(ns glimmer-gl.vector-test
   (:require [clojure.test :refer [deftest is testing]]
-            [geom-gl.vector :as v]))
+            [glimmer-gl.vector :as v]))
 
 (defn approx
   ([a b] (approx a b 1e-9))

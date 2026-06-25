@@ -1,5 +1,5 @@
-(ns geom-gl.test-runner
-  "Entry point for `joltc -M:test`. Requires each geom-gl test namespace and
+(ns glimmer-gl.test-runner
+  "Entry point for `joltc -M:test`. Requires each glimmer-gl test namespace and
   runs clojure.test against it. Exits non-zero on any failure."
   (:require [clojure.test :as t]))
 
@@ -24,7 +24,9 @@
     :else nil))
 
 (defn -main [& _]
-  (let [namespaces '[geom-gl.matrix-test geom-gl.vector-test geom-gl.gl-test]]
+  (let [namespaces '[glimmer-gl.matrix-test glimmer-gl.vector-test glimmer-gl.gl-test
+                     glimmer-gl.mesh-test glimmer-gl.primitives-test
+                     glimmer-gl.shader-test]]
     (doseq [ns namespaces]
       (try (require ns :reload)
             (catch Throwable e

@@ -1,13 +1,13 @@
-(ns geom-gl.gl-test
+(ns glimmer-gl.gl-test
   (:require [clojure.test :refer [deftest is testing]]))
 
-;; geom-gl.gl dlopens the host OpenGL library (:jolt/native in deps.edn) and
+;; glimmer-gl.gl dlopens the host OpenGL library (:jolt/native in deps.edn) and
 ;; resolves every defcfn symbol at ns load. jolt's require throws a raw String
 ;; on failure (e.g. an unresolved C symbol), so we catch and surface it as a
 ;; clean assertion failure rather than a test-namespace load crash.
 (defn- require-gl! []
   (try
-    (require '[geom-gl.gl] :reload)
+    (require '[glimmer-gl.gl] :reload)
     [true nil]
     (catch Throwable e [false (pr-str e)])))
 
@@ -15,7 +15,7 @@
   (let [[ok? err] (require-gl!)]
     (is ok? err)
     (when ok?
-      (let [gl (find-ns 'geom-gl.gl)]
+      (let [gl (find-ns 'glimmer-gl.gl)]
         (testing "core bindings resolve to C entry points"
           (is (some? (ns-resolve gl 'gl-clear)))
           (is (some? (ns-resolve gl 'gl-clear-color)))
@@ -46,7 +46,7 @@
 
 ;; write-floats is pure FFI (no GL context) so it can be unit-tested directly.
 (deftest write-floats-round-trips-through-memory
-  (let [gl (find-ns 'geom-gl.gl)
+  (let [gl (find-ns 'glimmer-gl.gl)
         wf (ns-resolve gl 'write-floats)
         ffi (find-ns 'jolt.ffi)
         read (ns-resolve ffi 'read)

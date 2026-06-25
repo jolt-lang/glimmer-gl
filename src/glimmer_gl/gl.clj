@@ -1,4 +1,4 @@
-(ns geom-gl.gl
+(ns glimmer-gl.gl
   "Minimal native OpenGL bindings via jolt FFI. The host GL library is dlopened
   by the jolt/native entry in deps.edn; each defcfn resolves its C entry point
   at ns load. GL calls need a current context to do work."
@@ -82,7 +82,10 @@
 (ffi/defcfn gl-get-uniform-location  "glGetUniformLocation" [:uint :string] :int)
 (ffi/defcfn gl-uniform-matrix4fv     "glUniformMatrix4fv"   [:int :int :uint8 :pointer] :void)
 (ffi/defcfn gl-uniform-1f            "glUniform1f"          [:int :float] :void)
+(ffi/defcfn gl-uniform-1i            "glUniform1i"          [:int :int] :void)
+(ffi/defcfn gl-uniform-2f            "glUniform2f"          [:int :float :float] :void)
 (ffi/defcfn gl-uniform-3f            "glUniform3f"          [:int :float :float :float] :void)
+(ffi/defcfn gl-uniform-4f            "glUniform4f"          [:int :float :float :float :float] :void)
 (ffi/defcfn gl-get-attrib-location   "glGetAttribLocation"  [:uint :string] :int)
 (ffi/defcfn gl-enable-vertex-attrib-array "glEnableVertexAttribArray" [:uint] :void)
 (ffi/defcfn gl-vertex-attrib-pointer "glVertexAttribPointer"

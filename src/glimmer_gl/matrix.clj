@@ -1,4 +1,4 @@
-(ns geom-gl.matrix
+(ns glimmer-gl.matrix
   "Column-major 4×4 matrices (OpenGL convention), ported from thi.ng/geom.
 
   Storage matches the layout glUniformMatrix4fv expects: each block of 4
@@ -163,6 +163,17 @@
            (inv-item a31 n01 a32 n00 (- a30) n03 invd)
            (inv-item a20 n03 a21 n01 a22 n00 invd)))))))
 
+(defn transform-point
+  "Apply this column-major matrix to a 3D point [x y z] as an affine transform
+  (w = 1, no perspective divide). Returns [x' y' z']. Storage is column-major, so
+  component r is Σ_c m{c}{r}·p_c — the translation column (m30 m31 m32) is added
+  last. Used to push mesh vertices through a model/view matrix."
+  [^Matrix44 m [x y z]]
+  (let [x (double x) y (double y) z (double z)]
+    [(+ (* (.-m00 m) x) (* (.-m10 m) y) (* (.-m20 m) z) (.-m30 m))
+     (+ (* (.-m01 m) x) (* (.-m11 m) y) (* (.-m21 m) z) (.-m31 m))
+     (+ (* (.-m02 m) x) (* (.-m12 m) y) (* (.-m22 m) z) (.-m32 m))]))
+
 ;; ---------------------------------------------------------------------------
 ;; Constructors. fov in degrees; near/far in world units.
 (def ^:private ^double deg->rad (/ Math/PI 180.0))
@@ -180,7 +191,10 @@
     (Matrix44.
       (/ f aspect) 0.0 0.0 0.0
       0.0 f 0.0 0.0
-      0.0 0.0 (+ (* near nf) far) -1.0
+      ;; m22 = (near+far)*nf, m32 = 2*near*far*nf — thi.ng's perspective. The
+      ;; earlier port mis-expanded thi.ng's `(addm near far nf)` (= (near+far)*nf)
+      ;; as `near*nf + far`, which put ~far in m22 and pushed NDC z off-screen.
+      0.0 0.0 (* (+ near far) nf) -1.0
       0.0 0.0 (* 2.0 near far nf) 0.0)))
 
 ;; Rotation about a single axis by theta (radians). Column-major storage, so

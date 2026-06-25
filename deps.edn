@@ -1,5 +1,11 @@
 {:paths ["src"]
 
+ ;; glimmer-gl is an extension of glimmer: the geometry/matrix/GL namespaces are
+ ;; standalone, but glimmer-gl.gtk registers GL widgets (:gl-area, :scale) into
+ ;; glimmer's widget registry, so glimmer is a dependency. Its GTK4/GLib native
+ ;; libs merge in via the dependency walk (only used by glimmer-gl.gtk).
+ :deps {jolt-lang/glimmer {:local/root "../glimmer"}}
+
  ;; OpenGL via the host. On macOS OpenGL ships as a framework; on Linux it's the
  ;; libGL shared object (mesa or the vendor driver). macOS note mirrors glimmer:
  ;; Chez's dlopen default search path does not include the framework dirs, so the
@@ -12,6 +18,6 @@
 
  ;; Native-GL geometry & matrix library for jolt, ported from thi.ng/geom's
  ;; platform-independent math onto jolt/Chez/FFI. See README.md.
- :aliases {:test {:extra-paths ["test"] :main-opts ["-m" "geom-gl.test-runner"]}}
+ :aliases {:test {:extra-paths ["test"] :main-opts ["-m" "glimmer-gl.test-runner"]}}
 
  :tasks {test "joltc -M:test"}}

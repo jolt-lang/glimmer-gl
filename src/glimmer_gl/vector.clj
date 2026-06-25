@@ -1,4 +1,4 @@
-(ns geom-gl.vector
+(ns glimmer-gl.vector
   "Lean 3D vector math, ported from thi.ng/geom's Vec3. Uses unboxed
   ^double fields (geom itself uses a boxed double-array for swizzles).")
 
@@ -55,3 +55,17 @@
 
 (defn dist [^Vec3 a ^Vec3 b]
   (sqrt (dist-squared a b)))
+
+(defn mix
+  "Linear interpolation from a to b. The two-arg form is the midpoint (t=0.5),
+  matching thi.ng's m/mix. Used by mesh subdivision and tessellation."
+  ([^Vec3 a ^Vec3 b] (mix a b 0.5))
+  ([^Vec3 a ^Vec3 b ^double t]
+   (Vec3. (+ (.-x a) (* (- (.-x b) (.-x a)) t))
+          (+ (.-y a) (* (- (.-y b) (.-y a)) t))
+          (+ (.-z a) (* (- (.-z b) (.-z a)) t)))))
+
+(defn centroid
+  "Average of a non-empty seq of Vec3 (thi.ng gu/centroid)."
+  [vs]
+  (scale (reduce add (Vec3. 0.0 0.0 0.0) vs) (/ 1.0 (count vs))))
