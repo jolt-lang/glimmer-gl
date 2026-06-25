@@ -1,0 +1,17 @@
+{:paths ["src"]
+
+ ;; OpenGL via the host. On macOS OpenGL ships as a framework; on Linux it's the
+ ;; libGL shared object (mesa or the vendor driver). macOS note mirrors glimmer:
+ ;; Chez's dlopen default search path does not include the framework dirs, so the
+ ;; absolute framework executable path is listed first.
+ :jolt/native [{:name "opengl"
+                :darwin ["/System/Library/Frameworks/OpenGL.framework/OpenGL"
+                         "/System/Library/Frameworks/OpenGL.framework/Versions/A/OpenGL"
+                         "libGL.dylib"]
+                :linux  ["libGL.so.1" "libGL.so"]}]
+
+ ;; Native-GL geometry & matrix library for jolt, ported from thi.ng/geom's
+ ;; platform-independent math onto jolt/Chez/FFI. See README.md.
+ :aliases {:test {:extra-paths ["test"] :main-opts ["-m" "geom-gl.test-runner"]}}
+
+ :tasks {test "joltc -M:test"}}

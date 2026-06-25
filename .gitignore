@@ -1,0 +1,10 @@
+# build / cache
+.cpcache/
+target/
+
+# editor / tooling
+.lsp/
+.clj-kondo/
+
+# OS
+.DS_Store

@@ -1,0 +1,12 @@
+geom-gl
+=======
+
+Native OpenGL geometry & matrix library for jolt, ported from thi.ng/geom.
+
+This product includes software developed as part of thi.ng/geom
+(https://thi.ng/geom) by Karsten Schmidt, licensed under the Apache License,
+Version 2.0. The matrix arithmetic, cofactor inversion, and constructor
+formulas are derived from geom's thi.ng.geom.matrix.
+
+geom-gl is licensed under the Apache License, Version 2.0 (see ./LICENSE),
+which is compatible with jolt's Eclipse Public License 1.0.
