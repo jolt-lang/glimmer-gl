@@ -4,7 +4,8 @@
   Storage matches the layout glUniformMatrix4fv expects: each block of 4
   values is one column, so m{c}{r} reads as column c, row r. The deftype
   holds 16 unboxed double fields; arithmetic is written as inlining macros
-  so the Chez compiler sees straight flonum math with no per-op allocation.")
+  so the Chez compiler sees straight flonum math with no per-op allocation."
+  (:require [glimmer-gl.vector :as v]))
 
 ;; ---------------------------------------------------------------------------
 ;; Inlined multiply-add / multiply-subtract, copied from thi.ng's math macros.
@@ -196,6 +197,39 @@
       ;; as `near*nf + far`, which put ~far in m22 and pushed NDC z off-screen.
       0.0 0.0 (* (+ near far) nf) -1.0
       0.0 0.0 (* 2.0 near far nf) 0.0)))
+
+;; Orthographic projection. Maps the axis-aligned box [left..right]×
+;; [bottom..top]×[near..far] to the clip cube [-1,1]³. Right-handed: z is
+;; negated so the camera looks down -Z (matches perspective). Used for
+;; directional-light shadow volumes where a frustum-shaped perspective would
+;; distort the depth map.
+(defn ortho
+  ^Matrix44 [^double left ^double right ^double bottom ^double top
+             ^double near ^double far]
+  (let [rl (/ 1.0 (- right left))
+        tb (/ 1.0 (- top bottom))
+        fn (/ 1.0 (- far near))]
+    (Matrix44.
+      (* 2.0 rl) 0.0 0.0 0.0
+      0.0 (* 2.0 tb) 0.0 0.0
+      0.0 0.0 (* -2.0 fn) 0.0
+      (* (- (+ right left)) rl) (* (- (+ top bottom)) tb) (* (- (+ far near)) fn) 1.0)))
+
+;; Right-handed view matrix placing a camera/light at `eye` aimed at `target`
+;; with `up` as the world-up hint. Builds an orthonormal basis (f=forward,
+;; s=right, u=up) and translates by the negated dot products. Column-major:
+;; col0/1/2 are the s/u/-f axes, col3 moves eye to the origin.
+(defn look-at
+  ^Matrix44 [eye target up]
+  (let [eye (v/vec3 (nth eye 0) (nth eye 1) (nth eye 2))
+        f   (v/normalize (v/sub (v/vec3 (nth target 0) (nth target 1) (nth target 2)) eye))
+        s   (v/normalize (v/cross f (v/vec3 (nth up 0) (nth up 1) (nth up 2))))
+        u   (v/cross s f)]
+    (Matrix44.
+      (.-x s) (.-x u) (- (.-x f)) 0.0
+      (.-y s) (.-y u) (- (.-y f)) 0.0
+      (.-z s) (.-z u) (- (.-z f)) 0.0
+      (- (v/dot s eye)) (- (v/dot u eye)) (v/dot f eye) 1.0)))
 
 ;; Rotation about a single axis by theta (radians). Column-major storage, so
 ;; each group of four values below is one matrix column.

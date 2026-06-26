@@ -135,6 +135,9 @@
         (case (:type u)
           :float (gl/gl-uniform-1f loc (double v))
           :int   (gl/gl-uniform-1i loc (int v))
+          ;; samplers are set with uniform1i whose value is the texture unit
+          (:sampler2D :sampler-2d :sampler2DShadow :sampler-2d-shadow)
+          (gl/gl-uniform-1i loc (int v))
           :vec2  (let [[a b] v]     (gl/gl-uniform-2f loc (double a) (double b)))
           :vec3  (let [[a b c] v]   (gl/gl-uniform-3f loc (double a) (double b) (double c)))
           :vec4  (let [[a b c d] v] (gl/gl-uniform-4f loc (double a) (double b) (double c) (double d)))

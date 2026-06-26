@@ -31,7 +31,7 @@
                       glimmer-gl.plane-test glimmer-gl.quaternion-test
                       glimmer-gl.triangle-test glimmer-gl.polyhedra-test
                       glimmer-gl.bezier-test glimmer-gl.polygon-test
-                      glimmer-gl.intersect-test]]
+                      glimmer-gl.intersect-test glimmer-gl.scene-test]]
     (doseq [ns namespaces]
       (try (require ns :reload)
             (catch Throwable e
