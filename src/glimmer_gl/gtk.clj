@@ -5,7 +5,8 @@
   glimmer's widget registry so the whole UI, GL pane included, is one reactive
   glimmer tree:
 
-    [:gl-area {:version [3 2] :on-realize f :on-render f :on-resize f :on-tick f}]
+    [:gl-area {:version [3 2] :on-realize f :on-render f :on-resize f
+               :on-tick f :on-motion (fn [area x y])}]
     [:scale   {:min 0 :max 1 :step 0.01 :value 0.5 :digits 2 :on-value f}]
 
   The GLArea is inherently imperative — its realize/render/resize signals build
@@ -38,6 +39,19 @@
 (ffi/defcfn gtk-widget-add-tick-callback
   "gtk_widget_add_tick_callback" [:pointer :pointer :pointer :pointer] :uint)
 
+;; --- GtkEventControllerMotion (pointer tracking) -----------------------------
+;; GTK4's way to follow the pointer over a widget: a dedicated event controller
+;; attached via gtk_widget_add_controller; its "motion" signal fires with
+;; widget-relative x,y on every pointer move.
+(ffi/defcfn gtk-event-controller-motion-new
+  "gtk_event_controller_motion_new" [] :pointer)
+(ffi/defcfn gtk-widget-add-controller
+  "gtk_widget_add_controller" [:pointer :pointer] :void)
+(ffi/defcfn gtk-widget-get-width
+  "gtk_widget_get_width" [:pointer] :int)
+(ffi/defcfn gtk-widget-get-height
+  "gtk_widget_get_height" [:pointer] :int)
+
 ;; --- GtkScale / GtkRange (sliders) -------------------------------------------
 (ffi/defcfn gtk-scale-new-with-range
   "gtk_scale_new_with_range" [:int :double :double :double] :pointer)
@@ -69,6 +83,14 @@
   "Ask the GLArea to redraw on the next frame."
   [area] (gtk-gl-area-queue-render area))
 
+(defn widget-width
+  "A widget's current allocated width, in pixels (GTK4)."
+  [w] (gtk-widget-get-width w))
+
+(defn widget-height
+  "A widget's current allocated height, in pixels (GTK4)."
+  [w] (gtk-widget-get-height w))
+
 (defn- connect!
   "Wire `cb` (a foreign-callable pointer) to `signal` on `widget`, retaining it
   for the process lifetime so GTK's raw pointer never dangles."
@@ -82,8 +104,10 @@
 ;;   :on-render  (fn [area])        issue draw calls; we always return TRUE
 ;;   :on-resize  (fn [area w h])    glViewport, store aspect, …
 ;;   :on-tick    (fn [area])        per-frame; we auto queue-render afterwards
+;;   :on-motion  (fn [area x y])    pointer move (widget-relative px); a
+;;                                  GtkEventControllerMotion we attach here
 (defn- gl-area-connect! [area props]
-  (let [{:keys [on-realize on-render on-resize on-tick]} props]
+  (let [{:keys [on-realize on-render on-resize on-tick on-motion]} props]
     (when on-realize
       (connect! area "realize"
         (ffi/foreign-callable (fn [a _] (on-realize a))
@@ -104,7 +128,15 @@
                    (fn [a _clock _data] (on-tick a) (queue-render a) 1)
                    [:pointer :pointer :pointer] :int :collect-safe)]
           (w/retain-callable! cb) cb)
-        ffi/null ffi/null))))
+        ffi/null ffi/null))
+    (when on-motion
+      ;; Attach a motion event controller to the area; GTK emits "motion" with
+      ;; widget-relative x,y on every pointer move over it.
+      (let [ctl (gtk-event-controller-motion-new)]
+        (gtk-widget-add-controller area ctl)
+        (connect! ctl "motion"
+          (ffi/foreign-callable (fn [_ x y _] (on-motion area (double x) (double y)))
+                                [:pointer :double :double :pointer] :void :collect-safe))))))
 
 (defn gl-area-spec []
   {:ctor      (fn [props]

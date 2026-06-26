@@ -172,6 +172,15 @@
         (recur (inc i) (next s))))
     ptr))
 
+(defn gen-one
+  "Call a GL `glGen*`-style fn (count, out-ptr) once and return the single id it wrote."
+  [f]
+  (let [p (ffi/alloc (ffi/sizeof :int))]
+    (f 1 p)
+    (let [v (ffi/read p :int)]
+      (ffi/free p)
+      v)))
+
 (defn- shader-status
   "Read a single GLint GL_*_STATUS for `shader-or-program` via `iv-fn`. Frees its
   scratch pointer. Returns the int."
