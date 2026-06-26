@@ -24,9 +24,14 @@
     :else nil))
 
 (defn -main [& _]
-  (let [namespaces '[glimmer-gl.matrix-test glimmer-gl.vector-test glimmer-gl.gl-test
-                     glimmer-gl.mesh-test glimmer-gl.primitives-test
-                     glimmer-gl.shader-test]]
+   (let [namespaces '[glimmer-gl.matrix-test glimmer-gl.vector-test glimmer-gl.vec2-test glimmer-gl.gl-test
+                      glimmer-gl.mesh-test glimmer-gl.primitives-test
+                      glimmer-gl.shader-test glimmer-gl.rect-test glimmer-gl.circle-test
+                      glimmer-gl.aabb-test glimmer-gl.sphere-test glimmer-gl.line-test
+                      glimmer-gl.plane-test glimmer-gl.quaternion-test
+                      glimmer-gl.triangle-test glimmer-gl.polyhedra-test
+                      glimmer-gl.bezier-test glimmer-gl.polygon-test
+                      glimmer-gl.intersect-test]]
     (doseq [ns namespaces]
       (try (require ns :reload)
             (catch Throwable e

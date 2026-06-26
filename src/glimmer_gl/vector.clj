@@ -30,6 +30,25 @@
 (defn scale [^Vec3 v ^double s]
   (Vec3. (* (.-x v) s) (* (.-y v) s) (* (.-z v) s)))
 
+(defn mul
+  "Componentwise product."
+  [^Vec3 a ^Vec3 b]
+  (Vec3. (* (.-x a) (.-x b)) (* (.-y a) (.-y b)) (* (.-z a) (.-z b))))
+
+(defn min
+  "Componentwise min."
+  [^Vec3 a ^Vec3 b]
+  (Vec3. (Math/min (.-x a) (.-x b))
+         (Math/min (.-y a) (.-y b))
+         (Math/min (.-z a) (.-z b))))
+
+(defn max
+  "Componentwise max."
+  [^Vec3 a ^Vec3 b]
+  (Vec3. (Math/max (.-x a) (.-x b))
+         (Math/max (.-y a) (.-y b))
+         (Math/max (.-z a) (.-z b))))
+
 (defn dot [^Vec3 a ^Vec3 b]
   (+ (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b))) (* (.-z a) (.-z b))))
 
