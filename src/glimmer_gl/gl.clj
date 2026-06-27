@@ -42,6 +42,41 @@
 (def GL-FALSE 0)
 (def GL-TRUE  1)
 
+;; --- face culling ------------------------------------------------------------
+(def GL-FRONT 0x0404)
+(def GL-BACK  0x0405)
+(def GL-CCW   0x0901)
+(def GL-CW    0x0900)
+
+;; --- textures ----------------------------------------------------------------
+(def GL-TEXTURE0                 0x84C0)
+(def GL-TEXTURE-2D               0x0DE1)
+(def GL-TEXTURE-MAG-FILTER       0x2800)
+(def GL-TEXTURE-MIN-FILTER       0x2801)
+(def GL-TEXTURE-WRAP-S           0x2802)
+(def GL-TEXTURE-WRAP-T           0x2803)
+(def GL-NEAREST                  0x2600)
+(def GL-LINEAR                   0x2601)
+(def GL-CLAMP-TO-EDGE            0x812F)
+(def GL-CLAMP-TO-BORDER          0x812D)
+(def GL-TEXTURE-BORDER-COLOR     0x810C)
+(def GL-DEPTH-COMPONENT          0x1902)
+(def GL-DEPTH-COMPONENT16        0x81A5)
+(def GL-DEPTH-COMPONENT24        0x81A6)
+(def GL-TEXTURE-COMPARE-MODE     0x884C)
+(def GL-TEXTURE-COMPARE-FUNC     0x884D)
+(def GL-COMPARE-REF-TO-TEXTURE   0x884E)
+(def GL-LESS                     0x0201)
+(def GL-LEQUAL                   0x0203)
+
+;; --- framebuffers ------------------------------------------------------------
+(def GL-FRAMEBUFFER            0x8D40)
+(def GL-FRAMEBUFFER-BINDING    0x8CA6)
+(def GL-DEPTH-ATTACHMENT       0x8D00)
+(def GL-COLOR-ATTACHMENT0      0x8CE0)
+(def GL-NONE                   0)
+(def GL-FRAMEBUFFER-COMPLETE   0x8CD5)
+
 ;; --- core GL entry points ----------------------------------------------------
 ;; Returns a pointer to a NUL-terminated vendor/renderer/version string.
 ;; NULL until a context is current.
@@ -92,6 +127,29 @@
   [:uint :int :uint :uint8 :int :pointer] :void)
 (ffi/defcfn gl-get-error             "glGetError"           [] :uint)
 
+;; --- face culling ------------------------------------------------------------
+(ffi/defcfn gl-cull-face   "glCullFace"  [:uint] :void)
+(ffi/defcfn gl-front-face  "glFrontFace" [:uint] :void)
+
+;; --- textures ----------------------------------------------------------------
+(ffi/defcfn gl-active-texture      "glActiveTexture"      [:uint] :void)
+(ffi/defcfn gl-gen-textures        "glGenTextures"        [:int :pointer] :void)
+(ffi/defcfn gl-bind-texture        "glBindTexture"        [:uint :uint] :void)
+(ffi/defcfn gl-tex-image-2d        "glTexImage2D"
+  [:uint :int :int :int :int :int :uint :uint :pointer] :void)
+(ffi/defcfn gl-tex-parameter-i     "glTexParameteri"      [:uint :uint :int] :void)
+(ffi/defcfn gl-tex-parameter-fv    "glTexParameterfv"     [:uint :uint :pointer] :void)
+
+;; --- framebuffers (render-to-texture for shadow mapping) ---------------------
+(ffi/defcfn gl-gen-framebuffers        "glGenFramebuffers"        [:int :pointer] :void)
+(ffi/defcfn gl-bind-framebuffer        "glBindFramebuffer"        [:uint :uint] :void)
+(ffi/defcfn gl-framebuffer-texture-2d  "glFramebufferTexture2D"
+  [:uint :uint :uint :uint :int] :void)
+(ffi/defcfn gl-check-framebuffer-status "glCheckFramebufferStatus" [:uint] :uint)
+(ffi/defcfn gl-draw-buffer             "glDrawBuffer"             [:uint] :void)
+(ffi/defcfn gl-read-buffer             "glReadBuffer"             [:uint] :void)
+(ffi/defcfn gl-get-integerv            "glGetIntegerv"            [:uint :pointer] :void)
+
 ;; --- helpers ------------------------------------------------------------------
 (defn gl-get-string*
   "Decode glGetString(name) to a jolt string; nil when no context is current
@@ -113,6 +171,15 @@
         (ffi/write ptr :float (* i 4) (double (first s)))
         (recur (inc i) (next s))))
     ptr))
+
+(defn gen-one
+  "Call a GL `glGen*`-style fn (count, out-ptr) once and return the single id it wrote."
+  [f]
+  (let [p (ffi/alloc (ffi/sizeof :int))]
+    (f 1 p)
+    (let [v (ffi/read p :int)]
+      (ffi/free p)
+      v)))
 
 (defn- shader-status
   "Read a single GLint GL_*_STATUS for `shader-or-program` via `iv-fn`. Frees its

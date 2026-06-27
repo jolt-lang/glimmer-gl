@@ -98,3 +98,24 @@
 (deftest rotate-z-half-turn-negates-xy
   (is (approx [-1 0 0 0  0 -1 0 0  0 0 1 0  0 0 0 1]
            (m/->vec (m/rotate-z Math/PI)) 1e-9)))
+
+;; --- camera / light projection ----------------------------------------------
+
+(deftest look-at-translation-along-z
+  ;; eye (0,0,5) looking at origin, up +Y. f=(0,0,-1), s=(1,0,0), u=(0,1,0),
+  ;; so this reduces to a pure translation by -5 in z (camera 5 units back).
+  (is (approx [1 0 0 0  0 1 0 0  0 0 1 0  0 0 -5 1]
+           (m/->vec (m/look-at [0 0 5] [0 0 0] [0 1 0])) 1e-9)))
+
+(deftest look-at-maps-world-into-front-of-camera
+  ;; origin sits 5 units in front of the eye -> view-space z = -5 (looking -Z).
+  (let [v (m/look-at [0 0 5] [0 0 0] [0 1 0])
+        [x y z] (m/transform-point v [0 0 0])]
+    (is (and (< (Math/abs x) 1e-9)
+             (< (Math/abs y) 1e-9)
+             (< (Math/abs (- z -5.0)) 1e-9)))))
+
+(deftest ortho-symmetric-unit-cube-is-axis-z-flip
+  ;; ortho(-1,1,-1,1,-1,1): x,y identity, z negated; no translation.
+  (is (approx [1 0 0 0  0 1 0 0  0 0 -1 0  0 0 0 1]
+           (m/->vec (m/ortho -1 1 -1 1 -1 1)) 1e-9)))

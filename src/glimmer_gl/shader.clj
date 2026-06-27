@@ -5,17 +5,20 @@
     {:version  \"330 core\"
      :uniforms {:u_mvp :mat4, :u_time [:float 0.0]}   ; type, or [type default]
      :attribs  {:a_pos [:vec3 0], :a_normal [:vec3 1]} ; [type location]
-     :varying  {:v_normal :vec3}
+     :varying  {:v_normal :vec3}                       ; out in vs, in in fs
+     :fs-out   {:frag_color :vec4}                     ; fragment outputs
      :prelude  \"#define PI 3.14159\\n\"               ; optional
-     :vs <glsl>      ; a string, or a seq of snippets joined with blank lines
-     :fs <glsl>}
+     :vs-main  [[:set :gl_Position [:* :u_mvp [:vec4 :a_pos 1.0]]] …]
+     :fs-main  [[:let :n :vec3 [:normalize :v_normal]] …]}
 
-  The `uniform`/`in`/`out` declarations are *generated* from the maps, so the
-  bodies only contain helper functions and `main()`. Because the spec is just
-  data, you compose and manipulate shaders with ordinary map ops — `assoc` a
-  uniform, `merge` two specs, swap a body, or build `:fs` from a vector of
-  reusable GLSL snippets (a palette fn, a noise fn, the main fn). Nothing touches
-  OpenGL until `program` renders the spec to GLSL strings and compiles it.
+   The `uniform`/`in`/`out` declarations are *generated* from the maps, and the
+   bodies are data — vectors of statements built from expression nodes that
+   `compile-expr` / `compile-stmt` turn into GLSL (see those fns for the node
+   forms). Because the spec is just data, you compose shaders with ordinary map
+   ops and `merge-specs`: a reusable lighting module is a map of its own
+   uniforms plus the statements that compute its term, merged before the
+   statements that consume it. Nothing touches OpenGL until `program` compiles
+   the GLSL.
 
   Targets the GL3 core profile (GtkGLArea is 3.2+): attributes use
   `layout(location=N) in …`, varyings use `out`/`in`."
@@ -49,24 +52,129 @@
                 (str "in " (name t) " " (name id) ";\n"))))
        (apply str)))
 
-(defn- body
-  "A GLSL body is a string, or a seq of snippets joined by blank lines — the
-  latter is how reusable functions compose into one stage."
-  [x] (if (sequential? x) (str/join "\n\n" x) (or x "")))
+;; === shader IR: bodies as composable data expressions ========================
+;; A body is a vector of statements; each statement's expressions are data nodes
+;; a pure compiler turns into GLSL. No GLSL strings in specs.
 
-(defn- snippets [x] (cond (nil? x) [] (sequential? x) (vec x) :else [x]))
+(def ^:private infix-op
+  "GLSL symbol for each infix operator node. Any op not in this map is emitted
+  as a function/constructor call."
+  {:+ "+" :- "-" :* "*" :/ "/"
+   :> ">" :< "<" :>= ">=" :<= "<=" :== "==" :!= "!="
+   :and "&&" :or "||"})
+
+(defn- fmt-num
+  "Emit a GLSL float literal: coerce to double and ensure a fractional part
+  (GLSL floats need the dot — a bare `1` would be an int)."
+  [n]
+  (let [s (str (double n))]
+    (if (or (str/includes? s ".") (str/includes? s "e") (str/includes? s "E"))
+      s
+      (str s ".0"))))
+
+(declare compile-expr)
+
+(defn- compile-call [op args]
+  (str (name op) "(" (str/join ", " (map compile-expr args)) ")"))
+
+(defn compile-expr
+  "Compile a shader IR expression node to a GLSL string. Pure — no GL context.
+
+  Node forms:
+    :name                     named ref (uniform / varying / attrib / local)
+    0.5                       float literal (whole numbers gain `.0`)
+    [:. x :xyz]               swizzle: x.xyz
+    [:neg x]                  unary minus: (-(x))
+    [:+ a b …] [:- :* :/ …]   arithmetic infix; infix operands are parenthesized
+    [:>= :<= :> :< :== :!=]   comparison infix
+    [:and …] [:or …]          logical infix
+    [:fn arg …] [:vec3 …] …   function/constructor call: fn(arg, …)"
+  [node]
+  (cond
+    (keyword? node) (name node)
+    (number? node)  (fmt-num node)
+    (vector? node)  (let [op (nth node 0)]
+                      (cond
+                        (= op :.)   (let [base (nth node 1)
+                                          c    (compile-expr base)]
+                                      ;; parenthesize a compound base so the
+                                      ;; swizzle binds to the whole expression,
+                                      ;; not its last factor
+                                      (str (if (or (keyword? base) (number? base))
+                                             c (str "(" c ")"))
+                                           "." (name (nth node 2))))
+                        (= op :neg) (str "(-(" (compile-expr (nth node 1)) "))")
+                        (infix-op op) (let [sep  (str " " (infix-op op) " ")
+                                            part (fn [x]
+                                                   (let [c (compile-expr x)]
+                                                     ;; wrap only operands that are
+                                                     ;; themselves infix — preserves
+                                                     ;; precedence without drowning
+                                                     ;; the output in parens
+                                                     (if (and (vector? x) (infix-op (nth x 0)))
+                                                       (str "(" c ")")
+                                                       c)))]
+                                        (str/join sep (map part (rest node))))
+                        :else (compile-call op (rest node))))
+    :else (throw (ex-info "shader: cannot compile expression node" {:node node}))))
+
+(defn- indent-lines
+  "Prefix every line of `s` with `n` spaces."
+  [s n]
+  (let [pad (str/join (repeat n " "))]
+    (->> (str/split s #"\n")
+         (map #(str pad %))
+         (str/join "\n"))))
+
+(declare compile-stmt)
+
+(defn- compile-stmts [stmts]
+  (str/join "\n" (map compile-stmt stmts)))
+
+(defn compile-stmt
+  "Compile one shader IR statement to GLSL. Pure.
+
+  Statement forms:
+    [:let name type expr]      declare+bind a local:  <type> <name> = <expr>;
+    [:set name expr]           assign existing target: <name> = <expr>;
+    [:if cond [then…]]        if (<cond>) { <then…> }
+    [:if cond [then…] [else…]] … with an else block"
+  [node]
+  (let [tag (nth node 0)]
+    (cond
+      (= tag :let) (let [sym (nth node 1) ty (nth node 2) x (nth node 3)]
+                    (str (name ty) " " (name sym) " = " (compile-expr x) ";"))
+      (= tag :set) (let [sym (nth node 1) x (nth node 2)]
+                    (str (name sym) " = " (compile-expr x) ";"))
+      (= tag :if)  (let [cond (nth node 1) then (nth node 2)
+                         body (str "if (" (compile-expr cond) ") {\n"
+                                   (indent-lines (compile-stmts then) 2) "\n}")]
+                    (if-let [els (nth node 3 nil)]
+                      (str body " else {\n" (indent-lines (compile-stmts els) 2) "\n}")
+                      body))
+      :else (throw (ex-info "shader: cannot compile statement node" {:node node})))))
+
+(defn compile-main
+  "Wrap a vector of statements in `void main() { … }`, each indented two spaces.
+  An empty body yields `void main() {}`."
+  [stmts]
+  (if (empty? stmts)
+    "void main() {}"
+    (str "void main() {\n"
+         (indent-lines (compile-stmts stmts) 2)
+         "\n}")))
 
 (defn merge-specs
-  "Combine shader spec fragments into one. Lets you build a shader from reusable
-  *modules* — each a map carrying its own uniforms plus the GLSL function(s) that
-  use them — and assemble them as data:
+  "Combine shader spec fragments into one — assemble a shader from reusable
+  *modules*, each a map of its own uniforms/varyings plus the data statements
+  that use them:
 
-    (merge-specs base plasma-module stripes-module main)
+    (merge-specs base shadow-module lighting-module fog-module)
 
-  Merge rules: :uniforms / :attribs / :varying maps merge (later wins on a key
-  conflict); :vs and :fs snippet lists concatenate in argument order, so a
-  module's helper functions land before the main() that calls them; :prelude
-  concatenates; :version takes the last one set."
+  Merge rules: :uniforms / :attribs / :varying / :fs-out maps merge (later wins
+  on a key conflict); :vs-main / :fs-main statement vectors concatenate in
+  argument order, so a module's declarations land before the statements that use
+  them; :prelude concatenates; :version takes the last one set."
   [& specs]
   (reduce (fn [a b]
             {:version  (or (:version b) (:version a))
@@ -74,20 +182,24 @@
              :uniforms (merge (:uniforms a) (:uniforms b))
              :attribs  (merge (:attribs a) (:attribs b))
              :varying  (merge (:varying a) (:varying b))
-             :vs (into (snippets (:vs a)) (snippets (:vs b)))
-             :fs (into (snippets (:fs a)) (snippets (:fs b)))})
+             :fs-out   (merge (:fs-out a) (:fs-out b))
+             :vs-main  (into (vec (:vs-main a)) (:vs-main b))
+             :fs-main  (into (vec (:fs-main a)) (:fs-main b))})
           {} specs))
 
 (defn sources
   "Render a shader spec to {:vs-src :fs-src} GLSL strings: `#version`, optional
-  `:prelude`, generated uniform/varying/attribute declarations, then the bodies.
-  Pure — call it without a GL context (handy for tests and inspection)."
-  [{:keys [vs fs uniforms attribs varying prelude version]
+  `:prelude`, generated uniform/varying/attribute/output declarations, then the
+  compiled data bodies (:vs-main / :fs-main statements → void main()). Pure —
+  call it without a GL context (handy for tests and inspection)."
+  [{:keys [vs-main fs-main fs-out uniforms attribs varying prelude version]
     :or {version "330 core"}}]
   (let [head (str "#version " version "\n" (or prelude "")
                   (glsl-vars "uniform" uniforms))]
-    {:vs-src (str head (glsl-vars "out" varying) (glsl-attribs attribs) (body vs))
-     :fs-src (str head (glsl-vars "in" varying) (body fs))}))
+    {:vs-src (str head (glsl-vars "out" varying) (glsl-attribs attribs)
+                  (compile-main (or vs-main [])))
+     :fs-src (str head (glsl-vars "in" varying) (glsl-vars "out" fs-out)
+                  (compile-main (or fs-main [])))}))
 
 ;; --- compilation (needs a current GL context) -------------------------------
 (defn- located-uniforms [prog uniforms]
@@ -135,6 +247,9 @@
         (case (:type u)
           :float (gl/gl-uniform-1f loc (double v))
           :int   (gl/gl-uniform-1i loc (int v))
+          ;; samplers are set with uniform1i whose value is the texture unit
+          (:sampler2D :sampler-2d :sampler2DShadow :sampler-2d-shadow)
+          (gl/gl-uniform-1i loc (int v))
           :vec2  (let [[a b] v]     (gl/gl-uniform-2f loc (double a) (double b)))
           :vec3  (let [[a b c] v]   (gl/gl-uniform-3f loc (double a) (double b) (double c)))
           :vec4  (let [[a b c d] v] (gl/gl-uniform-4f loc (double a) (double b) (double c) (double d)))
