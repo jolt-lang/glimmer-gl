@@ -53,8 +53,24 @@
         leye [(+ (nth target 0) (* (- dx) ed))
               (+ (nth target 1) (* (- dy) ed))
               (+ (nth target 2) (* (- dz) ed))]]
-    {:lview (m/look-at leye target [0.0 1.0 0.0])
-     :lproj (m/ortho (- b) b (- b) b n f)}))
+     {:lview (m/look-at leye target [0.0 1.0 0.0])
+      :lproj (m/ortho (- b) b (- b) b n f)}))
+
+(def ^:private keyval-kw
+  "GDK keyval -> movement keyword. Keys are longs so `(long keyval)` lookups match
+  exactly regardless of how the :uint from FFI is boxed."
+  {0xff52 :up, 0xff54 :down, 0xff51 :left, 0xff53 :right   ; arrows
+   0x77 :w, 0x57 :w, 0x61 :a, 0x41 :a                     ; w a (lower/upper)
+   0x73 :s, 0x53 :s, 0x64 :d, 0x44 :d                     ; s d
+   0xff1b :escape, 0x20 :space, 0xff0d :enter})
+
+(defn keyval->kw
+  "Map a GDK keyval to a movement-friendly keyword (:up/:down/:left/:right,
+  :w/:a/:s/:d, :escape, :space, :enter) or nil when the key is not one we care
+  about. Apps key their input handling on these stable keywords instead of raw
+  GDK integers."
+  [keyval]
+  (keyval-kw (long keyval)))
 
 (defn reactive-area
   "Return a `:gl-area` widget prop map that mounts `scene-fn` behind a lib-owned
@@ -80,7 +96,14 @@
     :on-motion (fn [nx ny])  optional pointer-move handler; nx,ny are the pointer
                              position normalized to [-1,1] across the GL area
                              (origin at centre). Mutate scene-driving cells here —
-                             the plan recomputes; no gl-* call belongs here."
+                             the plan recomputes; no gl-* call belongs here.
+    :on-key (fn [kw pressed?])  optional keyboard handler; kw is a stable keyword
+                                (:up/:down/:left/:right, :w/:a/:s/:d, :escape,
+                                :space, :enter) — see `keyval->kw`. Mutate cells
+                                here (e.g. a held-keys set); no gl-* call belongs.
+    :on-button (fn [pressed?])  optional mouse-button handler; pressed? is true on
+                                press, false on release. Pair with :on-motion for
+                                drag-to-look controls. No gl-* call belongs here."
   ([scene-fn] (reactive-area scene-fn {}))
   ([scene-fn opts]
    (let [plan-r (atom nil)     ; the scene reaction, built on realize
@@ -101,15 +124,26 @@
       (fn [_area w h] (reset! vp [(max (long w) 1) (max (long h) 1)]))
       :on-tick
       (or (:on-tick opts) (fn [_area]))
-      :on-motion
-      (when-let [m (:on-motion opts)]
-        ;; normalize raw widget px to [-1,1] across the GL area before handing
-        ;; the position to app code — keeps the demo free of GTK/GDK calls.
-        (fn [area x y]
-          (let [w (double (max (long (gtk/widget-width area)) 1))
-                h (double (max (long (gtk/widget-height area)) 1))]
-            (m (- (/ (* 2.0 (double x)) w) 1.0)
-               (- (/ (* 2.0 (double y)) h) 1.0)))))
+       :on-motion
+       (when-let [m (:on-motion opts)]
+         ;; normalize raw widget px to [-1,1] across the GL area before handing
+         ;; the position to app code — keeps the demo free of GTK/GDK calls.
+         (fn [area x y]
+           (let [w (double (max (long (gtk/widget-width area)) 1))
+                 h (double (max (long (gtk/widget-height area)) 1))]
+             (m (- (/ (* 2.0 (double x)) w) 1.0)
+                (- (/ (* 2.0 (double y)) h) 1.0)))))
+       :on-key
+       (when-let [k (:on-key opts)]
+         ;; translate the raw GDK keyval into a stable keyword before handing it
+         ;; to app code, dropping keys we don't recognize.
+         (fn [_area keyval pressed?]
+           (when-let [kw (keyval->kw keyval)]
+             (k kw pressed?))))
+       :on-button
+       (when-let [b (:on-button opts)]
+         ;; keep the surface tiny: the game only needs press/release.
+         (fn [_area _btn pressed? _x _y] (b pressed?)))
       :on-render
       (fn [_area]
         (when-let [s @st]
