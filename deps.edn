@@ -4,7 +4,9 @@
  ;; standalone, but glimmer-gl.gtk registers GL widgets (:gl-area, :scale) into
  ;; glimmer's widget registry, so glimmer is a dependency. Its GTK4/GLib native
  ;; libs merge in via the dependency walk (only used by glimmer-gl.gtk).
- :deps {jolt-lang/glimmer {:local/root "../glimmer"}}
+  :deps {jolt-lang/glimmer {:git/url "https://github.com/jolt-lang/glimmer"
+                            :git/tag "v0.0.1"
+                            :git/sha "4ede521b9dfac83873b3ff290dcc8fbeedb761e2"}}
 
  ;; OpenGL via the host. On macOS OpenGL ships as a framework; on Linux it's the
  ;; libGL shared object (mesa or the vendor driver). macOS note mirrors glimmer:
