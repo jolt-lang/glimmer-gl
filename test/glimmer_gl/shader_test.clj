@@ -82,6 +82,45 @@
     (is (< (str/index-of fs-src "#define PI")
            (str/index-of fs-src "uniform")))))
 
+;; OpenGL ES contexts (some GTK4 Linux setups) reject desktop GLSL 3.30, so
+;; adapt-spec retargets a spec to GLSL ES 3.00 with the precision qualifiers an
+;; ES fragment shader mandates — and sources must render that to valid ES GLSL.
+(deftest adapt-spec-retargets-for-gles
+  (testing "GLES swaps GLSL 3.30 core for ES 3.00 and adds float/int precision"
+    (let [es (sh/adapt-spec spec :gles)]
+      (is (= "300 es" (:version es)))
+      (is (str/includes? (:prelude es) "precision highp float;"))
+      (is (str/includes? (:prelude es) "precision highp int;"))
+      ;; `spec` declares no samplers → no sampler precision emitted
+      (is (not (str/includes? (:prelude es) "sampler")))))
+  (testing "GLES declares precision only for sampler types the spec uses"
+    (let [s (assoc spec :uniforms (assoc (:uniforms spec) :u_shadow :sampler2DShadow))
+          es (sh/adapt-spec s :gles)]
+      (is (str/includes? (:prelude es) "precision highp sampler2DShadow;"))))
+  (testing "GLES keeps an existing :prelude"
+    (let [es (sh/adapt-spec (assoc spec :prelude "#define PI 3.14\n") :gles)]
+      (is (str/includes? (:prelude es) "#define PI 3.14\n"))
+      (is (str/includes? (:prelude es) "precision highp float;"))))
+  (testing "core profile leaves the spec untouched"
+    (is (= spec (sh/adapt-spec spec :core)))))
+
+(deftest detect-profile-classifies-version-string
+  (is (= :core (sh/detect-profile "4.6.0 NVIDIA 550.40")))
+  (is (= :core (sh/detect-profile "4.1 Apple-2.0")))
+  (is (= :gles (sh/detect-profile "OpenGL ES 3.2 Mesa 23.0")))
+  (is (= :gles (sh/detect-profile "OpenGL ES 3.0")))
+  ;; no current context → safe desktop default, so non-ES paths are unchanged
+  (is (= :core (sh/detect-profile nil))))
+
+(deftest sources-emits-es-headers-for-gles-spec
+  (let [{:keys [vs-src fs-src]} (-> spec (sh/adapt-spec :gles) sh/sources)]
+    (is (str/starts-with? vs-src "#version 300 es\n"))
+    (is (str/starts-with? fs-src "#version 300 es\n"))
+    ;; ES has no default float precision in the fragment stage without this,
+    ;; and it must precede the uniform declarations.
+    (is (< (str/index-of fs-src "precision highp float;")
+           (str/index-of fs-src "uniform")))))
+
 ;; === shader IR: bodies as composable data expressions =========================
 ;;
 ;; A shader body is a vector of *statements*; each statement's expressions are

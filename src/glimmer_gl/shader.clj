@@ -187,6 +187,40 @@
              :fs-main  (into (vec (:fs-main a)) (:fs-main b))})
           {} specs))
 
+(def ^:private gles-sampler-types
+  "Sampler types that have no default precision in a GLSL ES fragment shader."
+  #{:sampler2D :sampler-2d :sampler2DShadow :sampler-2d-shadow
+    :samplerCube :sampler-cube})
+
+(defn detect-profile
+  "Classify a GL_VERSION string (from glGetString GL_VERSION) as :gles when the
+  context is OpenGL ES, otherwise :core. nil → :core (the safe desktop default,
+  so paths without a current context are unchanged). Pure."
+  [version-str]
+  (if (and version-str (str/includes? version-str "ES"))
+    :gles
+    :core))
+
+(defn adapt-spec
+  "Retarget `spec` for a GLSL `profile` (:core or :gles). :core is identity.
+  :gles switches the #version to ES 3.00 and prepends the precision qualifiers
+  the ES fragment stage needs — highp float/int always, plus highp for each
+  sampler type the spec declares (ES fragment shaders have no default sampler
+  precision). Pure; call without a GL context."
+  [spec profile]
+  (if (= profile :gles)
+    (let [type-of   (fn [v] (if (sequential? v) (first v) v))
+          samplers  (set (filter gles-sampler-types
+                                 (map type-of (vals (:uniforms spec)))))
+          precision (str "precision highp float;\n"
+                         "precision highp int;\n"
+                         (str/join (map #(str "precision highp " (name %) ";\n")
+                                        samplers)))]
+      (assoc spec
+             :version "300 es"
+             :prelude (str precision (or (:prelude spec) ""))))
+    spec))
+
 (defn sources
   "Render a shader spec to {:vs-src :fs-src} GLSL strings: `#version`, optional
   `:prelude`, generated uniform/varying/attribute/output declarations, then the
@@ -223,7 +257,10 @@
   remapped to {name {:loc … :type … :default …}} so callers set them by name.
   Throws if compilation/linking fails (gl/make-program prints the info log)."
   [spec]
-  (let [{:keys [vs-src fs-src]} (sources spec)]
+  ;; Auto-detect desktop vs ES from the current GL context: some Linux GTK4
+  ;; setups expose an ES-only driver that rejects #version 330 core.
+  (let [adapted (adapt-spec spec (detect-profile (gl/gl-get-string* gl/GL-VERSION)))
+        {:keys [vs-src fs-src]} (sources adapted)]
     (if-let [prog (gl/make-program vs-src fs-src)]
       (assoc spec
              :program  prog
