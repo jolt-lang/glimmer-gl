@@ -72,6 +72,17 @@
 (ffi/defcfn gtk-widget-get-root
   "gtk_widget_get_root" [:pointer] :pointer)
 
+;; --- cursor (blank-cursor pointer lock, #66) ---------------------------------
+;; NOTE: GTK4/GDK4 REMOVED gdk_device_warp, so the classic warp-to-center
+;; endless-turning pointer-lock trick is impossible here (it never worked on
+;; Wayland either). The achievable piece is hiding the system cursor while the
+;; player is "locked in" — q1k3 hides it on pointer lock. "none" is GTK's blank
+;; cursor name; passing NULL to gtk_widget_set_cursor restores the default.
+(ffi/defcfn gdk-cursor-new-from-name
+  "gdk_cursor_new_from_name" [:string :pointer] :pointer)
+(ffi/defcfn gtk-widget-set-cursor
+  "gtk_widget_set_cursor" [:pointer :pointer] :void)
+
 ;; Monotonic clock (microseconds, gint64) — for frame-rate-independent animation
 ;; in :on-tick handlers. A GLib symbol, resolved like the other g_* calls.
 (ffi/defcfn g-get-monotonic-time
@@ -103,6 +114,25 @@
 (defn make-current
   "Make the GLArea's GL context current. Call before issuing GL on realize."
   [area] (gtk-gl-area-make-current area))
+
+;; --- cursor (blank-cursor pointer lock, #66) ---------------------------------
+;; The blank ("none") GdkCursor is process-global and immutable; create it once
+;; and cache it. hide-cursor! sets it on a widget (the GLArea); show-cursor!
+;; passes NULL to restore the default cursor. See the FFI note above for why
+;; warp-to-center is not possible in GTK4.
+(def ^:private blank-cursor
+  (delay (gdk-cursor-new-from-name "none" ffi/null)))
+
+(defn hide-cursor!
+  "Hide the system cursor over `widget` (e.g. the GLArea) while the player is
+  locked in. Idempotent — sets the cached blank cursor."
+  [widget]
+  (gtk-widget-set-cursor widget @blank-cursor))
+
+(defn show-cursor!
+  "Restore the default cursor over `widget`. Pass-through after unlock."
+  [widget]
+  (gtk-widget-set-cursor widget ffi/null))
 
 (defn queue-render
   "Ask the GLArea to redraw on the next frame."
@@ -238,3 +268,5 @@
 (w/register-widget! :scale   (scale-spec))
 ;; The slider's value-bearing signal: handler gets the current double.
 (w/register-signal! :on-value "value-changed" gtk-range-get-value)
+;; The checkbutton's toggle signal: handler gets the active state (1/0 int).
+(w/register-signal! :on-toggled "toggled" g/gtk-checkbutton-get-active)

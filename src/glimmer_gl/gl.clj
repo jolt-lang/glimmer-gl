@@ -59,6 +59,9 @@
 (def GL-LINEAR                   0x2601)
 (def GL-CLAMP-TO-EDGE            0x812F)
 (def GL-CLAMP-TO-BORDER          0x812D)
+(def GL-TEXTURE-2D-ARRAY         0x9102)
+(def GL-TEXTURE-WRAP-R           0x8072)
+(def GL-REPEAT                   0x2901)
 (def GL-TEXTURE-BORDER-COLOR     0x810C)
 (def GL-DEPTH-COMPONENT          0x1902)
 (def GL-DEPTH-COMPONENT16        0x81A5)
@@ -137,6 +140,8 @@
 (ffi/defcfn gl-bind-texture        "glBindTexture"        [:uint :uint] :void)
 (ffi/defcfn gl-tex-image-2d        "glTexImage2D"
   [:uint :int :int :int :int :int :uint :uint :pointer] :void)
+(ffi/defcfn gl-tex-image-3d        "glTexImage3D"
+  [:uint :int :int :int :int :int :int :uint :uint :pointer] :void)
 (ffi/defcfn gl-tex-parameter-i     "glTexParameteri"      [:uint :uint :int] :void)
 (ffi/defcfn gl-tex-parameter-fv    "glTexParameterfv"     [:uint :uint :pointer] :void)
 
