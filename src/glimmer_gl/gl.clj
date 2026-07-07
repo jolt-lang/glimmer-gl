@@ -123,6 +123,7 @@
 (ffi/defcfn gl-uniform-1i            "glUniform1i"          [:int :int] :void)
 (ffi/defcfn gl-uniform-2f            "glUniform2f"          [:int :float :float] :void)
 (ffi/defcfn gl-uniform-3f            "glUniform3f"          [:int :float :float :float] :void)
+(ffi/defcfn gl-uniform-3fv           "glUniform3fv"         [:int :int :pointer] :void)
 (ffi/defcfn gl-uniform-4f            "glUniform4f"          [:int :float :float :float :float] :void)
 (ffi/defcfn gl-get-attrib-location   "glGetAttribLocation"  [:uint :string] :int)
 (ffi/defcfn gl-enable-vertex-attrib-array "glEnableVertexAttribArray" [:uint] :void)
@@ -153,6 +154,8 @@
 (ffi/defcfn gl-check-framebuffer-status "glCheckFramebufferStatus" [:uint] :uint)
 (ffi/defcfn gl-draw-buffer             "glDrawBuffer"             [:uint] :void)
 (ffi/defcfn gl-read-buffer             "glReadBuffer"             [:uint] :void)
+(ffi/defcfn gl-read-pixels             "glReadPixels"
+  [:int :int :int :int :uint :uint :pointer] :void)
 (ffi/defcfn gl-get-integerv            "glGetIntegerv"            [:uint :pointer] :void)
 
 ;; --- helpers ------------------------------------------------------------------
