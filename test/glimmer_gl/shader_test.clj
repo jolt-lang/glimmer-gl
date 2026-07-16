@@ -76,11 +76,14 @@
     (testing "version carried through"
       (is (str/starts-with? fs-src "#version 330 core\n")))))
 
-(deftest prelude-injected-before-decls
+(deftest uniforms-emitted-before-prelude
+  ;; Uniforms come before the prelude so helper functions defined there
+  ;; can reference them — strict GLSL compilers (Apple's) reject forward
+  ;; references even for globals.
   (let [s (assoc spec :prelude "#define PI 3.14159\n")
         {:keys [fs-src]} (sh/sources s)]
-    (is (< (str/index-of fs-src "#define PI")
-           (str/index-of fs-src "uniform")))))
+    (is (< (str/index-of fs-src "uniform")
+           (str/index-of fs-src "#define PI")))))
 
 ;; OpenGL ES contexts (some GTK4 Linux setups) reject desktop GLSL 3.30, so
 ;; adapt-spec retargets a spec to GLSL ES 3.00 with the precision qualifiers an
@@ -89,18 +92,19 @@
   (testing "GLES swaps GLSL 3.30 core for ES 3.00 and adds float/int precision"
     (let [es (sh/adapt-spec spec :gles)]
       (is (= "300 es" (:version es)))
-      (is (str/includes? (:prelude es) "precision highp float;"))
-      (is (str/includes? (:prelude es) "precision highp int;"))
+      (is (str/includes? (:precision es) "precision highp float;"))
+      (is (str/includes? (:precision es) "precision highp int;"))
       ;; `spec` declares no samplers → no sampler precision emitted
-      (is (not (str/includes? (:prelude es) "sampler")))))
+      (is (not (str/includes? (:precision es) "sampler")))))
   (testing "GLES declares precision only for sampler types the spec uses"
     (let [s (assoc spec :uniforms (assoc (:uniforms spec) :u_shadow :sampler2DShadow))
           es (sh/adapt-spec s :gles)]
-      (is (str/includes? (:prelude es) "precision highp sampler2DShadow;"))))
-  (testing "GLES keeps an existing :prelude"
+      (is (str/includes? (:precision es) "precision highp sampler2DShadow;"))))
+  (testing "GLES keeps an existing :prelude separate from :precision"
     (let [es (sh/adapt-spec (assoc spec :prelude "#define PI 3.14\n") :gles)]
       (is (str/includes? (:prelude es) "#define PI 3.14\n"))
-      (is (str/includes? (:prelude es) "precision highp float;"))))
+      (is (str/includes? (:precision es) "precision highp float;"))
+      (is (not (str/includes? (:prelude es) "precision")))))
   (testing "core profile leaves the spec untouched"
     (is (= spec (sh/adapt-spec spec :core)))))
 

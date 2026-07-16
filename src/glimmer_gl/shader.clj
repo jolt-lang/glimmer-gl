@@ -174,18 +174,20 @@
   Merge rules: :uniforms / :attribs / :varying / :fs-out maps merge (later wins
   on a key conflict); :vs-main / :fs-main statement vectors concatenate in
   argument order, so a module's declarations land before the statements that use
-  them; :prelude concatenates; :version takes the last one set."
+  them; :prelude concatenates; :precision takes the last one set; :version takes
+  the last one set."
   [& specs]
   (reduce (fn [a b]
-            {:version  (or (:version b) (:version a))
-             :prelude  (str (:prelude a) (:prelude b))
-             :uniforms (merge (:uniforms a) (:uniforms b))
-             :attribs  (merge (:attribs a) (:attribs b))
-             :varying  (merge (:varying a) (:varying b))
-             :fs-out   (merge (:fs-out a) (:fs-out b))
-             :vs-main  (into (vec (:vs-main a)) (:vs-main b))
-             :fs-main  (into (vec (:fs-main a)) (:fs-main b))})
-          {} specs))
+            {:version   (or (:version b) (:version a))
+             :precision (or (:precision b) (:precision a))
+             :prelude   (str (:prelude a) (:prelude b))
+             :uniforms  (merge (:uniforms a) (:uniforms b))
+             :attribs   (merge (:attribs a) (:attribs b))
+             :varying   (merge (:varying a) (:varying b))
+             :fs-out    (merge (:fs-out a) (:fs-out b))
+             :vs-main   (into (vec (:vs-main a)) (:vs-main b))
+             :fs-main   (into (vec (:fs-main a)) (:fs-main b))})
+           {} specs))
 
 (def ^:private gles-sampler-types
   "Sampler types that have no default precision in a GLSL ES fragment shader."
@@ -203,9 +205,9 @@
 
 (defn adapt-spec
   "Retarget `spec` for a GLSL `profile` (:core or :gles). :core is identity.
-  :gles switches the #version to ES 3.00 and prepends the precision qualifiers
-  the ES fragment stage needs — highp float/int always, plus highp for each
-  sampler type the spec declares (ES fragment shaders have no default sampler
+  :gles switches the #version to ES 3.00 and sets the :precision key with the
+  qualifiers the ES fragment stage needs — highp float/int always, plus highp for
+  each sampler type the spec declares (ES fragment shaders have no default sampler
   precision). Pure; call without a GL context."
   [spec profile]
   (if (= profile :gles)
@@ -218,18 +220,24 @@
                                         samplers)))]
       (assoc spec
              :version "300 es"
-             :prelude (str precision (or (:prelude spec) ""))))
+             :precision precision))
     spec))
 
 (defn sources
   "Render a shader spec to {:vs-src :fs-src} GLSL strings: `#version`, optional
-  `:prelude`, generated uniform/varying/attribute/output declarations, then the
-  compiled data bodies (:vs-main / :fs-main statements → void main()). Pure —
-  call it without a GL context (handy for tests and inspection)."
-  [{:keys [vs-main fs-main fs-out uniforms attribs varying prelude version]
+  `:precision` (GLES), generated uniform declarations (before `:prelude` so helper
+  functions can reference them), `:prelude`, then varying/attribute/output decls,
+  then the compiled data bodies (:vs-main / :fs-main statements → void main()).
+  Pure — call it without a GL context (handy for tests and inspection)."
+  [{:keys [vs-main fs-main fs-out uniforms attribs varying prelude precision version]
     :or {version "330 core"}}]
-  (let [head (str "#version " version "\n" (or prelude "")
-                  (glsl-vars "uniform" uniforms))]
+  ;; Emit uniforms before prelude so helper functions that reference them
+  ;; (e.g. a palette() that uses u_scale declared below) don't produce
+  ;; "undeclared identifier" errors on strict GLSL compilers (Apple's).
+  (let [head (str "#version " version "\n"
+                  (or precision "")
+                  (glsl-vars "uniform" uniforms)
+                  (or prelude ""))]
     {:vs-src (str head (glsl-vars "out" varying) (glsl-attribs attribs)
                   (compile-main (or vs-main [])))
      :fs-src (str head (glsl-vars "in" varying) (glsl-vars "out" fs-out)
