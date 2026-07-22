@@ -72,6 +72,16 @@
 (def GL-LESS                     0x0201)
 (def GL-LEQUAL                   0x0203)
 
+;; --- texture internal formats / pixel types ----------------------------------
+;; RGBA32F carries arbitrary float payloads as texels — e.g. a 2D gaussian's
+;; mean + symmetric covariance + RGB color packed two texels per splat, sampled
+;; with texelFetch in the fragment shader. RGBA/RGB + UNSIGNED_BYTE are the
+;; 8-bit formats gdk-pixbuf hands us for the source image.
+(def GL-RGBA32F        0x8814)
+(def GL-RGBA           0x1908)
+(def GL-RGB            0x1907)
+(def GL-UNSIGNED-BYTE  0x1401)
+
 ;; --- framebuffers ------------------------------------------------------------
 (def GL-FRAMEBUFFER            0x8D40)
 (def GL-FRAMEBUFFER-BINDING    0x8CA6)
@@ -121,6 +131,8 @@
 (ffi/defcfn gl-uniform-matrix4fv     "glUniformMatrix4fv"   [:int :int :uint8 :pointer] :void)
 (ffi/defcfn gl-uniform-1f            "glUniform1f"          [:int :float] :void)
 (ffi/defcfn gl-uniform-1i            "glUniform1i"          [:int :int] :void)
+(ffi/defcfn gl-uniform-1fv           "glUniform1fv"         [:int :int :pointer] :void)
+(ffi/defcfn gl-uniform-1iv           "glUniform1iv"         [:int :int :pointer] :void)
 (ffi/defcfn gl-uniform-2f            "glUniform2f"          [:int :float :float] :void)
 (ffi/defcfn gl-uniform-3f            "glUniform3f"          [:int :float :float :float] :void)
 (ffi/defcfn gl-uniform-3fv           "glUniform3fv"         [:int :int :pointer] :void)
@@ -177,6 +189,18 @@
     (loop [i 0, s (seq xs)]
       (when s
         (ffi/write ptr :float (* i 4) (double (first s)))
+        (recur (inc i) (next s))))
+    ptr))
+
+(defn write-ints
+  "Allocate a byte buffer and write each of `xs` as a 4-byte GLint at stride 4;
+  return the pointer (caller owns it). For glUniform1iv and integer attributes."
+  [xs]
+  (let [n   (count xs)
+        ptr (ffi/alloc (* (max 1 n) (ffi/sizeof :int)))]
+    (loop [i 0, s (seq xs)]
+      (when s
+        (ffi/write ptr :int (* i 4) (long (first s)))
         (recur (inc i) (next s))))
     ptr))
 
@@ -250,3 +274,108 @@
                   (gl-delete-program prog)
                   nil)
               prog)))))))
+
+;; ============================================================================
+;; Transform feedback + geometry shaders + texture buffers + query objects
+;; ----------------------------------------------------------------------------
+;; GPU stream generation: a vertex+geometry program computes per-primitive data
+;; and the geometry shader conditionally EmitVertex()s, so the survivors are
+;; CAPTURED into a buffer via transform feedback (variable-count compaction with
+;; no compute shaders / SSBOs — the tools macOS GL 4.1 lacks). A query object
+;; reports how many primitives were written; the buffer is then bound as a
+;; TEXTURE BUFFER (samplerBuffer) so a fragment shader can texelFetch it with no
+;; GL_MAX_TEXTURE_SIZE ceiling (a flat 1D stream, no tiling).
+;; ============================================================================
+
+;; --- enums -------------------------------------------------------------------
+(def GL-POINTS                              0x0000)
+(def GL-GEOMETRY-SHADER                     0x8DD9)
+(def GL-TRANSFORM-FEEDBACK-BUFFER           0x8C8E)
+(def GL-INTERLEAVED-ATTRIBS                 0x8C8C)
+(def GL-SEPARATE-ATTRIBS                    0x8C8D)
+(def GL-RASTERIZER-DISCARD                  0x8C89)
+(def GL-TRANSFORM-FEEDBACK-PRIMITIVES-WRITTEN 0x8C88)
+(def GL-QUERY-RESULT                        0x8866)
+(def GL-QUERY-RESULT-AVAILABLE              0x8867)
+(def GL-TEXTURE-BUFFER                      0x8C2A)
+(def GL-R32F                                0x822E)
+(def GL-RG32F                               0x8230)
+(def GL-DYNAMIC-COPY                        0x88EA)
+(def GL-DYNAMIC-DRAW                        0x88E8)
+(def GL-STREAM-DRAW                         0x88E0)
+(def GL-DYNAMIC-READ                        0x88E9)
+
+;; --- entry points ------------------------------------------------------------
+(ffi/defcfn gl-delete-buffers   "glDeleteBuffers"   [:int :pointer] :void)
+(ffi/defcfn gl-buffer-sub-data  "glBufferSubData"   [:uint :ssize_t :ssize_t :pointer] :void)
+(ffi/defcfn gl-get-buffer-sub-data "glGetBufferSubData" [:uint :ssize_t :ssize_t :pointer] :void)
+
+(ffi/defcfn gl-transform-feedback-varyings "glTransformFeedbackVaryings"
+  [:uint :int :pointer :uint] :void)
+(ffi/defcfn gl-bind-buffer-base            "glBindBufferBase"  [:uint :uint :uint] :void)
+(ffi/defcfn gl-begin-transform-feedback    "glBeginTransformFeedback" [:uint] :void)
+(ffi/defcfn gl-end-transform-feedback      "glEndTransformFeedback"   [] :void)
+
+(ffi/defcfn gl-gen-queries          "glGenQueries"          [:int :pointer] :void)
+(ffi/defcfn gl-delete-queries       "glDeleteQueries"       [:int :pointer] :void)
+(ffi/defcfn gl-begin-query          "glBeginQuery"          [:uint :uint] :void)
+(ffi/defcfn gl-end-query            "glEndQuery"            [:uint] :void)
+(ffi/defcfn gl-get-query-object-uiv "glGetQueryObjectuiv"   [:uint :uint :pointer] :void)
+
+(ffi/defcfn gl-tex-buffer           "glTexBuffer"           [:uint :uint :uint] :void)
+(ffi/defcfn gl-flush                "glFlush"               [] :void)
+(ffi/defcfn gl-finish               "glFinish"              [] :void)
+
+;; --- helpers -----------------------------------------------------------------
+(defn get-query-object-uiv
+  "Read a single GLuint query result (e.g. GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN
+  via GL_QUERY_RESULT). Frees its scratch pointer."
+  [^long id ^long pname]
+  (let [p (ffi/alloc (ffi/sizeof :int))]
+    (gl-get-query-object-uiv id pname p)
+    (let [v (ffi/read p :int)] (ffi/free p) v)))
+
+(defn read-floats
+  "Read `n` 4-byte floats out of a byte-buffer pointer into a Clojure vector."
+  [ptr n]
+  (mapv (fn [i] (ffi/read ptr :float (* i 4))) (range n)))
+
+(defn- write-cstr-array
+  "Allocate an array of `n` char* pointers, one per string in `strs` (each a
+  freshly allocated NUL-terminated C string). Returns [array-ptr [str-ptrs...]];
+  the caller frees the array and every str-ptr."
+  [strs]
+  (let [n    (count strs)
+        arr  (ffi/alloc (* n (ffi/sizeof :pointer)))
+        sps  (mapv ffi/string->ptr strs)]
+    (dotimes [i n] (ffi/write arr :pointer (* i (ffi/sizeof :pointer)) (nth sps i)))
+    [arr sps]))
+
+(defn make-tf-program
+  "Link a transform-feedback program from vertex + (optional) geometry GLSL, with
+  `varyings` (a seq of out-variable names) captured into ONE interleaved buffer.
+  No fragment shader — pair with glEnable(GL_RASTERIZER_DISCARD) when running it.
+  glTransformFeedbackVaryings MUST be set before linking, so this can't reuse
+  make-program. Returns the program id or nil (after printing the log) on failure."
+  [^String vs-source gs-source varyings]
+  (let [vs (make-shader GL-VERTEX-SHADER vs-source)
+        gs (when gs-source (make-shader GL-GEOMETRY-SHADER gs-source))]
+    (cond
+      (not vs) nil
+      (and gs-source (not gs)) (do (gl-delete-shader vs) nil)
+      :else
+      (let [prog (gl-create-program)
+            [arr sps] (write-cstr-array varyings)]
+        (gl-attach-shader prog vs)
+        (when gs (gl-attach-shader prog gs))
+        (gl-transform-feedback-varyings prog (count varyings) arr GL-INTERLEAVED-ATTRIBS)
+        (ffi/free arr)
+        (doseq [sp sps] (ffi/free sp))
+        (gl-link-program prog)
+        (gl-delete-shader vs)
+        (when gs (gl-delete-shader gs))
+        (if (zero? (shader-status gl-get-programiv prog GL-LINK-STATUS))
+          (do (dump-info-log gl-get-program-info-log prog)
+              (gl-delete-program prog)
+              nil)
+          prog)))))
