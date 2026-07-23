@@ -19,6 +19,13 @@
 (def GL-DEPTH-TEST 0x0B71)
 (def GL-CULL-FACE  0x0B44)
 (def GL-BLEND      0x0BE2)
+(def GL-SCISSOR-TEST 0x0C11)
+
+;; --- BlendingFactor ----------------------------------------------------------
+(def GL-ZERO-FACTOR         0)
+(def GL-ONE-FACTOR          1)
+(def GL-SRC-ALPHA           0x0302)
+(def GL-ONE-MINUS-SRC-ALPHA 0x0303)
 
 ;; --- PrimitiveType -----------------------------------------------------------
 (def GL-TRIANGLES      0x0004)
@@ -99,6 +106,8 @@
 (ffi/defcfn gl-viewport     "glViewport"    [:int :int :int :int] :void)
 (ffi/defcfn gl-enable       "glEnable"      [:uint] :void)
 (ffi/defcfn gl-disable      "glDisable"     [:uint] :void)
+(ffi/defcfn gl-blend-func   "glBlendFunc"   [:uint :uint] :void)
+(ffi/defcfn gl-scissor      "glScissor"     [:int :int :int :int] :void)
 
 ;; --- vertex buffer objects ---------------------------------------------------
 (ffi/defcfn gl-gen-buffers  "glGenBuffers"  [:int :pointer] :void)
