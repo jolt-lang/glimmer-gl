@@ -22,4 +22,4 @@
  ;; platform-independent math onto jolt/Chez/FFI. See README.md.
  :aliases {:test {:extra-paths ["test"] :main-opts ["-m" "glimmer-gl.test-runner"]}}
 
- :tasks {test "joltc -M:test"}}
+ :tasks {test "jolt -M:test"}}
