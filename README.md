@@ -132,6 +132,30 @@ The `:scale` slider's `value-changed` signal *does* fit, so it is added with
 See `../examples/glimmer-gl-app` for a complete demo: a rotating, diffuse-lit
 cube/sphere/tetrahedron driven by a reactive control panel.
 
+## GL without a window
+
+A GLArea only has a context once it's realized, so GL code normally can't run
+outside a running app — which makes render-to-texture passes and other
+compute-style GPU work untestable. `glimmer-gl.offscreen` asks GDK for a context
+bound to the display rather than to a surface:
+
+```clojure
+(require '[glimmer-gl.offscreen :as off])
+
+(let [ctx (off/ensure-current!)]
+  (if-let [err (:error ctx)]
+    (println "no offscreen GL:" err)   ; no display, or GL too old — skip
+    (do (compile-and-run-passes!) …)))
+```
+
+One context per process, created on first call and made current on every call;
+a failure is cached, so a headless run pays the probe once. Call it from the
+main thread — GDK contexts have the same thread affinity as the rest of GTK.
+
+There is no default framebuffer, so framebuffer 0 is incomplete and every draw
+must target an FBO. Compute passes already do that, but it does mean a `glClear`
+against framebuffer 0 quietly does nothing instead of clearing.
+
 ## Install
 
 Local dep (this is how the sibling demo uses it):
@@ -153,7 +177,9 @@ joltc -M:test
 ```
 
 The vector / matrix / mesh / primitives suites are pure and run headlessly; the
-GL binding test only dlopens the library and checks symbols resolve.
+GL binding test only dlopens the library and checks symbols resolve. The
+offscreen test does run real GL — it renders a pass into a float texture and
+reads it back — and skips with a printed reason when no display is available.
 
 ## Modules
 
@@ -174,6 +200,8 @@ GL binding test only dlopens the library and checks symbols resolve.
 - `glimmer-gl.gl` — OpenGL bindings: shaders/programs (`make-shader`,
   `make-program`), buffers and VAOs, uniforms, `write-floats`, `GL_*` constants.
 - `glimmer-gl.gtk` — the glimmer widget extension: `:gl-area` and `:scale`.
+- `glimmer-gl.offscreen` — a current GL context with no window, for headless
+  render-to-texture work: `ensure-current!`, `available?`, `release!`.
 
 ## License
 

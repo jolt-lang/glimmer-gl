@@ -32,7 +32,7 @@
                       glimmer-gl.triangle-test glimmer-gl.polyhedra-test
                       glimmer-gl.bezier-test glimmer-gl.polygon-test
                       glimmer-gl.intersect-test glimmer-gl.scene-test
-                       glimmer-gl.glmesh-test]]
+                       glimmer-gl.glmesh-test glimmer-gl.offscreen-test]]
     (doseq [ns namespaces]
       (try (require ns :reload)
             (catch Throwable e
