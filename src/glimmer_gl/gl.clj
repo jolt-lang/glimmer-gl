@@ -165,6 +165,7 @@
 (ffi/defcfn gl-tex-image-3d        "glTexImage3D"
   [:uint :int :int :int :int :int :int :uint :uint :pointer] :void)
 (ffi/defcfn gl-tex-parameter-i     "glTexParameteri"      [:uint :uint :int] :void)
+(ffi/defcfn gl-delete-textures     "glDeleteTextures"     [:int :pointer] :void)
 (ffi/defcfn gl-tex-parameter-fv    "glTexParameterfv"     [:uint :uint :pointer] :void)
 
 ;; --- framebuffers (render-to-texture for shadow mapping) ---------------------
@@ -173,6 +174,7 @@
 (ffi/defcfn gl-framebuffer-texture-2d  "glFramebufferTexture2D"
   [:uint :uint :uint :uint :int] :void)
 (ffi/defcfn gl-check-framebuffer-status "glCheckFramebufferStatus" [:uint] :uint)
+(ffi/defcfn gl-delete-framebuffers      "glDeleteFramebuffers"     [:int :pointer] :void)
 (ffi/defcfn gl-draw-buffer             "glDrawBuffer"             [:uint] :void)
 (ffi/defcfn gl-read-buffer             "glReadBuffer"             [:uint] :void)
 (ffi/defcfn gl-read-pixels             "glReadPixels"
@@ -221,6 +223,17 @@
     (let [v (ffi/read p :int)]
       (ffi/free p)
       v)))
+
+(defn delete-one
+  "Call a GL `glDelete*`-style fn (count, in-ptr) on a single id — the counterpart
+  of `gen-one`. Render-to-texture code that allocates scratch targets per image
+  needs this, or every reload leaks VRAM."
+  [f ^long id]
+  (let [p (ffi/alloc (ffi/sizeof :int))]
+    (ffi/write p :int 0 id)
+    (f 1 p)
+    (ffi/free p)
+    nil))
 
 (defn- shader-status
   "Read a single GLint GL_*_STATUS for `shader-or-program` via `iv-fn`. Frees its
