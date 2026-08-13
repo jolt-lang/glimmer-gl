@@ -7,12 +7,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: glimmer-gl
-      - name: Check out sibling glimmer dep
-        uses: actions/checkout@v4
-        with:
-          repository: jolt-lang/glimmer
-          ref: v0.0.1
-          path: glimmer
+      # No sibling checkout of the glimmer dep: deps.edn declares it as a
+      # :git/url, so jolt fetches it itself.
       - name: Install jolt
         run: |
           set -euo pipefail

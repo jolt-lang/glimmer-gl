@@ -1,9 +1,9 @@
 (ns glimmer-gl.gtk
-  "glimmer-gl's bridge into glimmer's GTK4 widget tree: the GTK widgets glimmer
+  "glimmer-gl's bridge into the GTK4 widget tree: the GTK widgets glimmer-gtk
   itself omits but a GL app needs — GtkGLArea (the OpenGL drawing surface) and
-  GtkScale (a slider). Requiring this namespace registers two hiccup tags into
-  glimmer's widget registry so the whole UI, GL pane included, is one reactive
-  glimmer tree:
+  GtkScale (a slider). Requiring this namespace installs the GTK4 backend and
+  registers two hiccup tags into its widget registry, so the whole UI, GL pane
+  included, is one reactive glimmer tree:
 
     [:gl-area {:version [3 2] :on-realize f :on-render f :on-resize f
                :on-tick f :on-motion (fn [area x y])}]
@@ -11,12 +11,16 @@
 
   The GLArea is inherently imperative — its realize/render/resize signals build
   and drive raw GL objects, and render returns a gboolean — so those handlers are
-  wired directly (see `gl-area-spec`'s :connect) rather than through glimmer's
+  wired directly (see `gl-area-spec`'s :connect) rather than through the backend's
   uniform void(widget,data) signal path. The slider's value-changed signal does
   fit that path, so it is added with `w/register-signal!` and needs no custom
-  wiring."
-  (:require [glimmer.ffi :as g]
-            [glimmer.widget :as w]
+  wiring.
+
+  glimmer-gtk.core is required for its side effect: these widgets are GTK ones,
+  so the GTK backend has to be the installed one for them to mean anything."
+  (:require [glimmer-gtk.core]
+            [glimmer-gtk.ffi :as g]
+            [glimmer-gtk.widget :as w]
             [jolt.ffi :as ffi]))
 
 ;; --- GtkGLArea ---------------------------------------------------------------

@@ -1,6 +1,7 @@
 # glimmer-gl
 
-An extension of [glimmer](../glimmer) for working with OpenGL and 3D geometry on
+An extension of [glimmer](https://github.com/jolt-lang/glimmer) for working with
+OpenGL and 3D geometry on
 Jolt (a Clojure-like Lisp on Chez Scheme). It does two things:
 
 - **Composable geometry**, ported from [thi.ng/geom](https://thi.ng/geom): build
@@ -12,8 +13,9 @@ Jolt (a Clojure-like Lisp on Chez Scheme). It does two things:
   varyings, version) as maps and compose its stages from reusable GLSL snippets;
   the declarations are generated and only emitted as a GLSL string when you
   compile.
-- **GL widgets for glimmer**: requiring `glimmer-gl.gtk` registers a `:gl-area`
-  (a GtkGLArea drawing surface) and `:scale` (a slider) into glimmer's widget
+- **GL widgets for glimmer**: requiring `glimmer-gl.gtk` installs the
+  [glimmer-gtk](https://github.com/jolt-lang/glimmer-gtk) backend and registers a
+  `:gl-area` (a GtkGLArea drawing surface) and `:scale` (a slider) into its widget
   registry, so a GL pane lives in the same reactive hiccup tree as the rest of
   your UI.
 
@@ -108,7 +110,7 @@ See `gl-demo.scene` in the demo for the plasma + stripes shader built this way.
 
 ```clojure
 (require '[glimmer.core :as ui]
-         '[glimmer-gl.gtk])    ; registers :gl-area and :scale
+         '[glimmer-gl.gtk])    ; installs the GTK4 backend, registers :gl-area and :scale
 
 (defn app []
   [:vbox
@@ -122,10 +124,11 @@ See `gl-demo.scene` in the demo for the plasma + stripes shader built this way.
 (ui/run app)
 ```
 
-The GLArea's realize/render/resize signals don't fit glimmer's uniform
+The GLArea's realize/render/resize signals don't fit glimmer-gtk's uniform
 `void(widget, data)` handler shape (render returns a gboolean, resize carries
 width/height), so `glimmer-gl.gtk` wires them directly via the widget spec's
-`:connect` hook — the extension point glimmer exposes through `register-widget!`.
+`:connect` hook — the extension point glimmer-gtk exposes through
+`register-widget!`.
 The `:scale` slider's `value-changed` signal *does* fit, so it is added with
 `register-signal!` and needs no special wiring.
 
