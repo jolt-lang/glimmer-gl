@@ -199,7 +199,7 @@
         ptr (ffi/alloc (* n (ffi/sizeof :float)))]
     (loop [i 0, s (seq xs)]
       (when s
-        (ffi/write ptr :float (* i 4) (double (first s)))
+        (ffi/write ptr :float (double (first s)) (* i 4))
         (recur (inc i) (next s))))
     ptr))
 
@@ -211,7 +211,7 @@
         ptr (ffi/alloc (* (max 1 n) (ffi/sizeof :int)))]
     (loop [i 0, s (seq xs)]
       (when s
-        (ffi/write ptr :int (* i 4) (long (first s)))
+        (ffi/write ptr :int (long (first s)) (* i 4))
         (recur (inc i) (next s))))
     ptr))
 
@@ -230,7 +230,7 @@
   needs this, or every reload leaks VRAM."
   [f ^long id]
   (let [p (ffi/alloc (ffi/sizeof :int))]
-    (ffi/write p :int 0 id)
+    (ffi/write p :int id 0)
     (f 1 p)
     (ffi/free p)
     nil))
@@ -264,7 +264,7 @@
         src    (ffi/string->ptr source)
         arr    (ffi/alloc (ffi/sizeof :pointer))]
     ;; glShaderSource(shader, count=1, &src, lengths=NULL)
-    (ffi/write arr :pointer 0 src)
+    (ffi/write arr :pointer src 0)
     (gl-shader-source sh 1 arr ffi/null)
     (ffi/free src)
     (ffi/free arr)
@@ -370,7 +370,7 @@
   (let [n    (count strs)
         arr  (ffi/alloc (* n (ffi/sizeof :pointer)))
         sps  (mapv ffi/string->ptr strs)]
-    (dotimes [i n] (ffi/write arr :pointer (* i (ffi/sizeof :pointer)) (nth sps i)))
+    (dotimes [i n] (ffi/write arr :pointer (nth sps i) (* i (ffi/sizeof :pointer))))
     [arr sps]))
 
 (defn make-tf-program
