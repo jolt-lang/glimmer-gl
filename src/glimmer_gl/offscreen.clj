@@ -62,7 +62,7 @@
 ;; working and a hard crash on the error path.
 (defn- error-slot []
   (let [p (ffi/alloc (ffi/sizeof :pointer))]
-    (ffi/write p :pointer 0 ffi/null)
+    (ffi/write p :pointer ffi/null 0)
     p))
 
 (defn- take-error!
