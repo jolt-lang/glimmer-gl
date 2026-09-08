@@ -10,6 +10,6 @@ Version 2.0. Derived from geom: the matrix arithmetic, cofactor inversion, and
 constructor formulas (thi.ng.geom.matrix); the mesh model, tessellation, and
 primitive vertex/face definitions (thi.ng.geom.{basicmesh,utils,cuboid,
 tetrahedron,sphere,plane}); and the shader-spec model (thi.ng.geom.gl.shaders).
+Those portions remain licensed under the Apache License, Version 2.0.
 
-glimmer-gl is licensed under the Apache License, Version 2.0 (see ./LICENSE),
-which is compatible with jolt's Eclipse Public License 1.0.
+The remainder of glimmer-gl is licensed under the MIT License (see ./LICENSE).

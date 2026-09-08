@@ -208,6 +208,6 @@ reads it back — and skips with a printed reason when no display is available.
 
 ## License
 
-Apache License 2.0. The vector/matrix arithmetic, mesh model, tessellation,
-primitive constructors, and shader-spec model are derived from thi.ng/geom; see
-`NOTICE`.
+MIT (see `LICENSE`). The vector/matrix arithmetic, mesh model, tessellation,
+primitive constructors, and shader-spec model are derived from thi.ng/geom and
+remain licensed under the Apache License 2.0; see `NOTICE`.
