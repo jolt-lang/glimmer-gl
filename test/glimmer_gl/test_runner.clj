@@ -17,12 +17,6 @@
               (println "  caused by:" (.getName (class c)) ":" (ex-message c))))
         (prn e)))))
 
-(defn- exit [code]
-  (cond
-    (resolve 'jolt.host/exit) ((resolve 'jolt.host/exit) code)
-    (resolve 'System/exit)    ((resolve 'System/exit) code)
-    :else nil))
-
 (defn -main [& _]
    (let [namespaces '[glimmer-gl.matrix-test glimmer-gl.vector-test glimmer-gl.vec2-test glimmer-gl.gl-test
                       glimmer-gl.mesh-test glimmer-gl.primitives-test
@@ -33,16 +27,17 @@
                       glimmer-gl.bezier-test glimmer-gl.polygon-test
                       glimmer-gl.intersect-test glimmer-gl.scene-test
                        glimmer-gl.glmesh-test glimmer-gl.offscreen-test]]
-    (doseq [ns namespaces]
-      (try (require ns :reload)
-            (catch Throwable e
-              ;; jolt's require throws a raw String on compile failure, not a Throwable,
-              ;; so print the object itself rather than ex-message (which is nil for strings).
-              (println "ERROR requiring" ns ":" (pr-str e)))))
-    (let [results (apply t/run-tests namespaces)
-          failed (+ (:fail results 0) (:error results 0))]
+    ;; A namespace that fails to load registers no tests, so run-tests alone
+    ;; would report it as a clean run; count it as a failure.
+    (let [load-errors (count (for [ns namespaces
+                                   :let [e (try (require ns :reload) nil
+                                                (catch Throwable e e))]
+                                   :when e]
+                               (println "ERROR requiring" ns ":" (pr-str e))))
+          results (apply t/run-tests namespaces)
+          failed (+ (:fail results 0) (:error results 0) load-errors)]
       (println "----")
       (println "tests:" (:test results 0)
                "assertions:" (:pass results 0) "passed /"
                failed "failed")
-      (when (pos? failed) (exit 1)))))
+      (when (pos? failed) (System/exit 1)))))
