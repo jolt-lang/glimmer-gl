@@ -193,3 +193,21 @@
               "}")
          (sh/compile-main [[:let :N :vec3 [:normalize :v_normal]]
                           [:set :frag_color [:vec4 :col 1.0]]]))))
+
+(defn- thrown-data [f]
+  (try (f) nil (catch Exception e (ex-data e))))
+
+(deftest sources-rejects-unknown-keys
+  (testing "GLSL-string :vs/:fs (not the spec format) is an error, not an empty main()"
+    (let [d (thrown-data #(sh/sources {:uniforms {:u_t :float}
+                                       :vs "void main(){ gl_Position = vec4(0.0); }"
+                                       :fs ["out vec4 frag;" "void main(){ frag = vec4(1.0); }"]}))]
+      (is (= #{:vs :fs} (set (:unknown-keys d))))))
+  (testing "a misspelled key is reported"
+    (is (= [:uniform] (:unknown-keys (thrown-data #(sh/sources (assoc spec :uniform {:u_x :float}))))))
+    (is (thrown-with-msg? Exception #":uniform"
+          (sh/sources (assoc spec :uniform {:u_x :float})))))
+  (testing "a body that is a GLSL string rather than statements is an error"
+    (is (= :fs-main (:key (thrown-data #(sh/sources (assoc spec :fs-main "frag = vec4(1.0);")))))))
+  (testing "namespaced keys are left for callers' own annotations"
+    (is (string? (:vs-src (sh/sources (assoc spec :my.app/name "lit")))))))
