@@ -10,9 +10,8 @@ Jolt (a Clojure-like Lisp on Chez Scheme). It does two things:
   primitive constructors.
 - **Shaders as data** (`glimmer-gl.shader`), ported from thi.ng/geom's
   shader-spec model: declare a shader's interface (uniforms, attributes,
-  varyings, version) as maps and compose its stages from reusable GLSL snippets;
-  the declarations are generated and only emitted as a GLSL string when you
-  compile.
+  varyings, version) as maps and write the stage bodies as data statements;
+  the declarations and bodies are only emitted as GLSL when you compile.
 - **GL widgets for glimmer**: requiring `glimmer-gl.gtk` installs the
   [glimmer-gtk](https://github.com/jolt-lang/glimmer-gtk) backend and registers a
   `:gl-area` (a GtkGLArea drawing surface) and `:scale` (a slider) into its widget
@@ -58,10 +57,12 @@ model-view-projection from the matrix ops and `->vec` it into a uniform.
 
 ## Shaders as data
 
-A shader is a map declaring its interface; the bodies are GLSL, and `:vs`/`:fs`
-may be a vector of snippets that compose into one stage. The `uniform` / `in` /
-`out` declarations are generated, so you manipulate shaders with plain map ops
-and only emit GLSL when you compile.
+A shader is a map declaring its interface plus its `main()` bodies. The
+`uniform` / `in` / `out` declarations are generated from the maps, and the
+bodies (`:vs-main` / `:fs-main`) are data too: vectors of statements built from
+expression nodes, compiled to GLSL by `compile-stmt` / `compile-expr`. Helper
+functions that the IR can't express go in `:prelude` as a GLSL string. You
+manipulate shaders with plain map ops and only emit GLSL when you compile.
 
 ```clojure
 (require '[glimmer-gl.shader :as sh])
@@ -70,11 +71,13 @@ and only emit GLSL when you compile.
   {:version  "330 core"
    :uniforms {:u_mvp :mat4, :u_time [:float 0.0]}     ; type, or [type default]
    :attribs  {:a_pos [:vec3 0], :a_normal [:vec3 1]}  ; [type location]
-   :varying  {:v_normal :vec3}
-   :vs "void main(){ v_normal = a_normal; gl_Position = u_mvp*vec4(a_pos,1.0); }"
-   :fs ["vec3 palette(float t){ return vec3(t); }"     ; compose stages from
-        "out vec4 frag;"                                ; reusable snippets
-        "void main(){ frag = vec4(palette(u_time), 1.0); }"]})
+   :varying  {:v_normal :vec3}                        ; out in vs, in in fs
+   :fs-out   {:frag :vec4}                            ; fragment outputs
+   :prelude  "vec3 palette(float t){ return vec3(t); }\n"
+   :vs-main  [[:set :v_normal :a_normal]
+              [:set :gl_Position [:* :u_mvp [:vec4 :a_pos 1.0]]]]
+   :fs-main  [[:let :n :vec3 [:normalize :v_normal]]
+              [:set :frag [:vec4 [:* [:palette :u_time] [:. :n :z]] 1.0]]]})
 
 (sh/sources spec)   ; => {:vs-src "#version 330 core\n…" :fs-src "…"}  (pure, no GL)
 
@@ -84,24 +87,33 @@ and only emit GLSL when you compile.
                           :u_time t}))
 ```
 
+Statements are `[:let name type expr]`, `[:set target expr]` and
+`[:if cond [then…] [else…]]`; expressions are keywords (names), numbers,
+`[:. x :xyz]` swizzles, `[:neg x]`, infix ops (`:+ :- :* :/`, comparisons,
+`:and`/`:or`), and any other `[:fn arg …]` as a call or constructor. `sources`
+throws on a key it doesn't know (so a typo such as `:uniform`, or GLSL strings
+under `:vs`/`:fs`, fails instead of compiling to an empty `main()`); namespaced
+keys are ignored.
+
 Compose and manipulate with ordinary data: `(assoc-in spec [:uniforms :u_warp] :float)`,
-`(update spec :fs conj extra-snippet)`, `(merge base overrides)`.
+`(update spec :fs-main conj [:set :frag [:vec4 1.0]])`, `(merge base overrides)`.
 
 For bigger composition, build a shader from reusable **modules** — each a map
-carrying its own uniforms plus the GLSL function that uses them — and combine
-them with `merge-specs`:
+carrying its own uniforms plus the GLSL helper (in `:prelude`) or statements that
+use them — and combine them with `merge-specs`:
 
 ```clojure
-(def plasma-module  {:uniforms {:u_scale :float} :fs ["vec3 plasma_color(vec3 p){…}"]})
-(def stripes-module {:uniforms {:u_stripes :float} :fs ["vec3 stripe_color(vec3 p){…}"]})
+(def plasma-module  {:uniforms {:u_scale :float} :prelude "vec3 plasma_color(vec3 p){…}\n"})
+(def stripes-module {:uniforms {:u_stripes :float} :prelude "vec3 stripe_color(vec3 p){…}\n"})
 (def main-module    {:uniforms {:u_mix :float}
-                     :fs ["out vec4 frag;"
-                          "void main(){ frag = vec4(mix(plasma_color(v_obj),
-                                                        stripe_color(v_obj), u_mix), 1.0); }"]})
+                     :fs-out   {:frag :vec4}
+                     :fs-main  [[:let :col :vec3 [:mix [:plasma_color :v_obj]
+                                                      [:stripe_color :v_obj] :u_mix]]
+                                [:set :frag [:vec4 :col 1.0]]]})
 
 (sh/merge-specs base plasma-module stripes-module main-module)
-;; uniforms merge; snippet lists concatenate in order, so each module's
-;; functions land ahead of the main() that calls them.
+;; uniforms merge; preludes and statement vectors concatenate in order, so each
+;; module's helpers land ahead of the main() that calls them.
 ```
 
 See `gl-demo.scene` in the demo for the plasma + stripes shader built this way.
@@ -176,7 +188,7 @@ deps (`{:git/url … :git/sha …}` with a full sha).
 ## Run tests
 
 ```sh
-joltc -M:test
+jolt -M:test
 ```
 
 The vector / matrix / mesh / primitives suites are pure and run headlessly; the
@@ -199,7 +211,7 @@ reads it back — and skips with a printed reason when no display is available.
 - `glimmer-gl.shader` — shaders as data: `sources` (spec → GLSL strings),
   `program` (compile/link + locate uniforms/attribs), `set-uniform!` /
   `set-uniforms!` (by name), `merge-specs` (compose shader modules),
-  `glsl-vars` / `glsl-attribs`.
+  `compile-stmt` / `compile-expr` (the body IR), `glsl-vars` / `glsl-attribs`.
 - `glimmer-gl.gl` — OpenGL bindings: shaders/programs (`make-shader`,
   `make-program`), buffers and VAOs, uniforms, `write-floats`, `GL_*` constants.
 - `glimmer-gl.gtk` — the glimmer widget extension: `:gl-area` and `:scale`.

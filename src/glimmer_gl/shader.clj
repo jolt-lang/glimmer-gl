@@ -223,17 +223,50 @@
              :precision precision))
     spec))
 
+(def spec-keys
+  "The keys a shader spec may carry. `sources` rejects any other unqualified key
+  (namespaced keys are left alone for callers' own annotations), so a misspelled
+  or GLSL-string key fails loudly instead of compiling to an empty main()."
+  #{:version :precision :prelude :uniforms :attribs :varying :fs-out
+    :vs-main :fs-main})
+
+(def ^:private key-hints
+  {:vs "use :vs-main with a vector of IR statements (GLSL helper functions go in :prelude)"
+   :fs "use :fs-main with a vector of IR statements (GLSL helper functions go in :prelude)"})
+
+(defn- check-spec!
+  [spec]
+  (let [unknown (vec (filter #(and (keyword? %) (nil? (namespace %))
+                                  (not (contains? spec-keys %)))
+                             (keys spec)))]
+    (when (seq unknown)
+      (throw (ex-info (str "shader: unknown spec key(s) " (str/join " " unknown)
+                           (let [hints (keep key-hints unknown)]
+                             (if (seq hints) (str "; " (first hints)) ""))
+                           "; expected one of " (str/join " " (sort spec-keys)))
+                      {:unknown-keys unknown :spec-keys spec-keys}))))
+  (doseq [k [:vs-main :fs-main]]
+    (let [v (get spec k)]
+      (when-not (or (nil? v) (and (sequential? v) (every? vector? v)))
+        (throw (ex-info (str "shader: " k " must be a vector of IR statements "
+                             "(e.g. [[:set :frag [:vec4 :col 1.0]]]), got "
+                             (pr-str v))
+                        {:key k :value v}))))))
+
 (defn sources
   "Render a shader spec to {:vs-src :fs-src} GLSL strings: `#version`, optional
   `:precision` (GLES), generated uniform declarations (before `:prelude` so helper
   functions can reference them), `:prelude`, then varying/attribute/output decls,
   then the compiled data bodies (:vs-main / :fs-main statements → void main()).
-  Pure — call it without a GL context (handy for tests and inspection)."
+  Pure — call it without a GL context (handy for tests and inspection).
+  Throws on an unknown unqualified key (see `spec-keys`) or a body that is not a
+  vector of statements."
   [{:keys [vs-main fs-main fs-out uniforms attribs varying prelude precision version]
-    :or {version "330 core"}}]
+    :or {version "330 core"} :as spec}]
   ;; Emit uniforms before prelude so helper functions that reference them
   ;; (e.g. a palette() that uses u_scale declared below) don't produce
   ;; "undeclared identifier" errors on strict GLSL compilers (Apple's).
+  (check-spec! spec)
   (let [head (str "#version " version "\n"
                   (or precision "")
                   (glsl-vars "uniform" uniforms)
