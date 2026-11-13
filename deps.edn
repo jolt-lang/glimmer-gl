@@ -11,7 +11,8 @@
  ;; itself comes in under it, and glimmer-gl.scene uses its ratoms). The GTK4/GLib
  ;; native libs merge in via the dependency walk (only used by glimmer-gl.gtk).
   :deps {jolt-lang/glimmer-gtk {:git/url "https://github.com/jolt-lang/glimmer-gtk"
-                                :git/sha "4887443b2c0d3f08a99ccb5084ad7d1de84b54e6"}}
+                                :git/tag "v0.1.3"
+                                :git/sha "582966ab6c0b793ad5eef607f0ca2986453da7b1"}}
 
  ;; OpenGL via the host. On macOS OpenGL ships as a framework; on Linux it's the
  ;; libGL shared object (mesa or the vendor driver). macOS note mirrors glimmer:
